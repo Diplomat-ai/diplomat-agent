@@ -1,147 +1,113 @@
+![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue) ![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green) ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
+
 # agent-canary
 
-**What can your AI agent do to the real world?**
+Your agent can send emails, delete database rows, and charge credit cards — do you know which of those calls have no validation around them?
 
-agent-canary finds every tool call in your Python agent that can change the real world — database writes, payments, emails, API calls, LLM invocations, dynamic code execution — and checks whether protections exist before execution.
+agent-canary scans your Python codebase and maps every function that can change the real world. For each one, it tells you what safety checks exist — and what's missing.
 
-It generates a `toolcalls.yaml` you commit to your repo: a living inventory of your agent's real-world impact surface, with the protection status of each function.
+```
+$ agent-canary ./skyvern/
+382 tool calls · 307 with no checks · 66 partial · 9 confirmed
+
+⚠ terminate                 .../script_skyvern_page.py:868
+  actions:
+    shutil.rmtree(temp_dir)
+    os.kill(pid, signal.SIGTERM)
+  checks:  none
+
+⚠ _analyze_gmail_messages   .../composio_gmail_connector.py:228
+  actions:
+    session.execute(insert(messages))
+  checks:  none
+    → no auth check · no rate limit · no idempotency key
+
+~ session_create             .../browser.py:126
+  actions:
+    db.add(browser_session)
+    db.commit()
+  checks:
+    if not current_user: raise HTTPException(403)
+    → no rate limit
+
+✓ _get_or_create_browser_state  .../script_skyvern_page.py:81  [idempotency: full]
+```
+
+## The problem
+
+Your agent calls `stripe.Refund.create`, `session.commit`, `requests.post` — and nothing stops it from doing so twice, without auth, or with unbounded parameters. 1,075 GitHub issues across LangGraph, CrewAI, AutoGen, and OpenAI Agents SDK document tool calls executing multiple times without idempotency. 307 of 382 tool calls in Skyvern have no checks at all.
+
+## What it does
+
+Scans your Python source with AST analysis. No network calls. No config. No dependencies. Finds every function that triggers a real-world action (DB write, payment, email, API call, LLM invocation, file delete) and checks whether protections exist (auth, rate limit, validation, idempotency, retry bounds).
+
+## Quickstart
 
 ```bash
 pip install agent-canary
-agent-canary . --format registry
+agent-canary ./my_agent/
 ```
 
-1.36 seconds. Zero config. Zero network calls. Everything runs locally.
+Output in < 2 seconds. Zero dependencies. Try it on the included demo:
 
-## What you get
-
-### Terminal output
-
-```
-47 tool calls · 31 with no checks · 12 partial · 4 confirmed
-
-⚠ process_refund  agents/tools.py:42
-  actions:
-    stripe.Refund.create(amount=amount)
-  checks:  none
-    → no bounds on amount · no rate limit · no idempotency key
-
-~ send_notification  agents/notify.py:12
-  actions:
-    requests.post(webhook_url, json=payload)
-  checks:
-    @rate_limit(max_calls=10, period=60)
-    → no input validation on webhook_url
-
-✓ update_order  agents/tools.py:67  [checked:ok — validated at API layer]
+```bash
+agent-canary examples/demo_agent/
 ```
 
-### toolcalls.yaml (commit this)
+## What gets flagged
+
+| Tool call | Why it's flagged |
+|-----------|-----------------|
+| `stripe.Refund.create(amount=amount)` | No bounds on `amount`, no rate limit, no idempotency key |
+| `session.commit()` in an agent tool | No auth check before the write |
+| `openai.chat.completions.create()` in a retry loop | No `max_retries` or `stop_after_attempt` — unbounded LLM spend |
+
+## CI integration
 
 ```yaml
-summary:
-  total: 47
-  no_checks: 31
-  partial_checks: 12
-  confirmed: 4
-
-tool_calls:
-
-  # ⚠ NO CHECKS — payment / database_delete
-  - function: process_refund
-    file: agents/tools.py
-    line: 42
-    actions:
-      - "stripe.Refund.create(amount=amount)"
-    checks: []
-    missing:
-      - "bounds on 'amount' (numeric parameter, no limit)"
-      - "rate limit"
-      - "idempotency key"
-
-  # ✓ CONFIRMED
-  - function: update_order
-    file: agents/tools.py
-    line: 67
-    actions:
-      - "session.commit()"
-    checks:
-      - type: auth_check
-        code: "Depends(get_current_user)"
-    missing: []
-    confirmed: "checked:ok — validated at API layer"
+- run: pip install agent-canary
+- run: agent-canary . --fail-on-unchecked --output-registry toolcalls.yaml
 ```
 
-### CI integration
+Exit code 1 if any new tool call has no checks. Existing unguarded calls are visible but don't block CI until you address them.
 
-```yaml
-# .github/workflows/agent-canary.yml
-name: agent-canary
-on: [pull_request]
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install agent-canary
-      - run: agent-canary . --fail-on-unchecked --output-registry toolcalls.yaml
+## The registry
+
+```bash
+agent-canary . --format registry > toolcalls.yaml
 ```
 
-On first run, `agent-canary . --format registry` generates the baseline `toolcalls.yaml`. Commit it. After that, `--fail-on-unchecked` only blocks new tool calls not in the baseline — existing ones are visible but don't break CI until you address them at your own pace.
+Generates a YAML inventory of every tool call, its checks, and what's missing. Commit it to your repo. Diff it on PRs. Each entry can be signed off with `# checked:ok` — creating an auditable record of who reviewed what.
+
+This is what no other tool produces: a versionable, diffable artifact that tracks your agent's entire impact surface over time. See [`examples/toolcalls.skyvern.yaml`](examples/toolcalls.skyvern.yaml) for a real excerpt.
+
+## Benchmarked on real projects
+
+| Project | Stars | Tool calls | Unguarded | Time |
+|---------|------:|----------:|-----------:|-----:|
+| [Skyvern](https://github.com/Skyvern-AI/skyvern) | 20.9k | 382 | 307 (80%) | ~2s |
+| [SurfSense](https://github.com/MODSetter/SurfSense) | 13.3k | 319 | 169 (53%) | 1.4s |
+| [FinRobot](https://github.com/AI4Finance-Foundation/FinRobot) | 6.5k | 27 | 18 (67%) | <1s |
 
 ## How to resolve findings
 
-In your source code:
-
 | Action | How |
-|---|---|
+|--------|-----|
 | **Fix** | Add validation in code. The next scan picks it up. |
 | **Acknowledge** | Add `# checked:ok` as a comment on the function. |
 | **Protected elsewhere** | Add `# checked:ok — protected by [middleware/gateway/etc]` |
 
 ## What it detects
 
-### Tool calls (actions that change the real world)
+**Tool calls:** `session.commit`, `db.add`, `stripe.Refund.create`, `requests.post`, `send_mail`, `openai.chat.completions.create`, `exec()`, `s3.put_object`, `os.remove`, `shutil.rmtree`
 
-* **Database writes:** `session.add`, `session.commit`, `db.commit`, `.save()`, `.create()`, `.update()`
-* **Database deletes:** `session.delete`, `os.remove`, `shutil.rmtree`
-* **HTTP writes:** `requests.post/put/patch/delete`, httpx equivalents
-* **Payments:** `stripe.Refund.create`, `stripe.Charge.create`, `stripe.PaymentIntent.create`
-* **Email/messaging:** `send_mail`, `smtplib`, `slack_client.chat_postMessage`, twilio
-* **LLM calls:** `openai.chat.completions.create`, `anthropic.messages.create`, `llm.invoke`, `ainvoke`, custom wrappers
-* **Dynamic code:** `importlib.import_module`, `exec()`, `eval()`
-* **Publish:** `s3.put_object`, `s3.upload_file`
+**Checks:** `Depends()` / `Security()` (FastAPI), `@login_required`, `@rate_limit`, `get_or_create`, `Field(le=, ge=)`, `max_retries=`, `confirm` / `approve` in function body
 
-### Checks (protections before execution)
+## Limitations
 
-* **Input validation:** `Field(le=, ge=)`, `@validator`, `if...raise ValueError`
-* **Auth:** `Depends()`, `Security()` (FastAPI), `@login_required`
-* **Rate limits:** `@rate_limit`, `@throttle`
-* **Idempotency:** `get_or_create`, `upsert`, `ON CONFLICT`
-* **Retry bounds:** `max_retries=`, `@retry(stop=stop_after_attempt())`
-* **Confirmation:** `confirm`, `approve`, `review` in function body
-
-Only `if` blocks that actually stop execution (`raise`, `return`) count as checks. A logging-only `if` is not a check.
-
-## What it does NOT detect
-
-Transparency on limits builds trust.
-
-* **ORM implicit mutations** — `entity.field = x` without `session.add()`
-* **Dynamic tools** — MCP servers, plugins, OpenAPI-generated tools (use `--config` YAML mode)
-* **Checks in other files** — middleware, API gateways, upstream services (use `# checked:ok — protected by [where]`)
-* **Cross-function analysis** — if the check is in the caller and the effect is in the callee
-* **Unbounded loops** — `while True` with tool calls inside (planned)
-* **TypeScript** — Python only for now (TypeScript planned)
-* **Import aliases** — `import requests as req` then `req.post()`
-
-## Benchmarked on real projects
-
-| Project | Stars | Stack | Files | Tool calls | Time |
-|---|---|---|---|---|---|
-| [Skyvern](https://github.com/Skyvern-AI/skyvern) | 20.9k | Playwright + SQLAlchemy + FastAPI | 595 | 437 | ~2s |
-| [FinRobot](https://github.com/AI4Finance-Foundation/FinRobot) | 6.5k | AutoGen + Pandas + ReportLab | ~50 | 27 | <1s |
-| [SurfSense](https://github.com/MODSetter/SurfSense) | 13.3k | LangGraph + Celery + RBAC | 395 | 319 | 1.36s |
+- **Import aliases** — `import requests as req` then `req.post()` is not detected
+- **Cross-function analysis** — if the check is in the caller and the effect is in the callee, not detected
+- **Python only** — TypeScript planned
 
 ## Why this exists
 
@@ -150,6 +116,8 @@ We analyzed 3,047 GitHub issues across LangGraph, CrewAI, AutoGen, OpenAI Agents
 The most common pattern (1,075 issues): a tool call that executes multiple times when it should execute once. The cause: no idempotency, no rate limit, no circuit breaker in the code around the tool.
 
 agent-canary doesn't fix these problems. It makes them visible.
+
+See [methodology](docs/METHODOLOGY.md) for data sources and classification criteria.
 
 ## Configuration
 
@@ -163,10 +131,10 @@ tools:
     effects: [messaging]
 ```
 
-Generate from scan: `agent-canary . --init`
+## License
 
-## Built by
+Apache-2.0
 
-[Diplomat](https://diplomat.run) — runtime governance for AI agents.
+---
 
-agent-canary maps what your agents can do. Diplomat controls it at runtime.
+Built by the team behind Diplomat — runtime governance for AI agents.

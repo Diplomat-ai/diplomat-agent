@@ -1,4 +1,4 @@
-"""Tests for diplomat-canary scanner, analyzer, and reporter."""
+"""Tests for agent-canary scanner, analyzer, and reporter."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ import pytest
 # Ensure the src package is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat_canary.scanner.ast_scanner import scan_directory, scan_file
-from diplomat_canary.analyzer.guards import apply_verdicts, build_summary, compute_verdict
-from diplomat_canary.analyzer.scenarios import generate_scenarios
-from diplomat_canary.reporter.terminal import render_plain
-from diplomat_canary.reporter.json_report import render_json
-from diplomat_canary.models import ScanResult
+from agent_canary.scanner.ast_scanner import scan_directory, scan_file
+from agent_canary.analyzer.guards import apply_verdicts, build_summary, compute_verdict
+from agent_canary.analyzer.scenarios import generate_scenarios
+from agent_canary.reporter.terminal import render_plain
+from agent_canary.reporter.json_report import render_json
+from agent_canary.models import ScanResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
 LANGGRAPH = FIXTURES / "langgraph_agent"
@@ -176,7 +176,7 @@ class TestTerminalReport:
     def test_report_contains_header(self):
         result = _make_result(LANGGRAPH)
         output = render_plain(result, str(LANGGRAPH))
-        assert "diplomat-canary" in output
+        assert "agent-canary" in output
 
     def test_report_contains_scanned_path(self):
         result = _make_result(LANGGRAPH)
@@ -242,7 +242,7 @@ class TestYamlScanner:
         except ImportError:
             pass
 
-        from diplomat_canary.scanner.yaml_scanner import load_yaml_config
+        from agent_canary.scanner.yaml_scanner import load_yaml_config
         config = tmp_path / "config.yml"
         config.write_text("tools: []")
         with pytest.raises(ImportError):
@@ -255,7 +255,7 @@ class TestYamlScanner:
         except ImportError:
             pytest.skip("PyYAML not installed")
 
-        from diplomat_canary.scanner.yaml_scanner import load_yaml_config
+        from agent_canary.scanner.yaml_scanner import load_yaml_config
 
         config_content = """
 agent:
@@ -279,7 +279,7 @@ tools:
       - category: read
     guards: []
 """
-        config_path = tmp_path / "diplomat-canary.yml"
+        config_path = tmp_path / "agent-canary.yml"
         config_path.write_text(config_content)
 
         tools = load_yaml_config(config_path)
@@ -404,7 +404,7 @@ class TestExclusions:
 
     def test_nested_fixture_from_spec(self):
         """The spec fixture nested_test_dir/tests/utils/helpers.py must not appear."""
-        from diplomat_canary.scanner.ast_scanner import scan_directory
+        from agent_canary.scanner.ast_scanner import scan_directory
         nested = FIXTURES / "nested_test_dir"
         tools = scan_directory(nested)
         names = {t.name for t in tools}
@@ -418,7 +418,7 @@ class TestExclusions:
 
 class TestFailOnUnguarded:
     def test_exit_code_1_when_unguarded(self, tmp_path):
-        from diplomat_canary.cli import main
+        from agent_canary.cli import main
 
         tool_file = tmp_path / "tools.py"
         tool_file.write_text(
@@ -430,7 +430,7 @@ class TestFailOnUnguarded:
         assert exit_code == 1
 
     def test_exit_code_0_when_no_unguarded(self, tmp_path):
-        from diplomat_canary.cli import main
+        from agent_canary.cli import main
 
         # Only a read-only file
         tool_file = tmp_path / "tools.py"

@@ -1,4 +1,4 @@
-"""Plain Python agent services for testing diplomat-canary.
+"""Plain Python agent services for testing agent-canary.
 
 These tools match the Phase 6 spec:
 - make_payment: stripe.Charge.create with Pydantic Field(le=10000) → GUARDED or PARTIALLY_GUARDED

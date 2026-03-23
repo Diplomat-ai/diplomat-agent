@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from diplomat_canary.models import ScanResult, Tool
-from diplomat_canary.analyzer.scenarios import estimate_total_financial_exposure
-from diplomat_canary.reporter.terminal import (
+from agent_canary.models import ScanResult, Tool
+from agent_canary.analyzer.scenarios import estimate_total_financial_exposure
+from agent_canary.reporter.terminal import (
     _category_label,
     _category_risk_hint,
     _format_params,
@@ -27,7 +27,7 @@ def render_markdown(result: ScanResult, scanned_path: str) -> str:
     """Render the full report as a Markdown string."""
     lines: list[str] = []
 
-    lines.append("# 🐤 diplomat-canary — Governance Report")
+    lines.append("# 🐤 agent-canary — Governance Report")
     lines.append("")
     lines.append(f"**Scanned:** `{scanned_path}`  ")
     lines.append(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  ")
@@ -81,11 +81,6 @@ def render_markdown(result: ScanResult, scanned_path: str) -> str:
     lines.append("")
     lines.append("---")
     lines.append("")
-    if result.summary.get("unguarded", 0) > 0:
-        lines.append(
-            "🔒 *Intercept these tool calls before execution → [diplomat.run](https://diplomat.run)*"
-        )
-        lines.append("")
 
     return "\n".join(lines) + "\n"
 

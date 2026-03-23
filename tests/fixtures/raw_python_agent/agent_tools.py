@@ -1,4 +1,4 @@
-"""Plain Python agent tools (no framework) for testing diplomat-canary.
+"""Plain Python agent tools (no framework) for testing agent-canary.
 
 Uses requests, SQLAlchemy-style patterns, and stripe directly.
 """

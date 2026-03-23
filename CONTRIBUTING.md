@@ -3,7 +3,7 @@
 ## Quick start
 
 ```bash
-git clone https://github.com/diplomat-ai/agent-canary.git
+git clone https://github.com/Diplomat-agents/agent-canary.git
 cd agent-canary
 pip install -e ".[dev]"
 python -m pytest tests/

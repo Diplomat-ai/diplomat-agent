@@ -15,3 +15,13 @@ env/
 *.so
 .coverage
 htmlcov/
+
+# Internal research data
+data/
+*report*.json
+
+# Claude Code session
+.claude/
+
+# OS
+.DS_Store

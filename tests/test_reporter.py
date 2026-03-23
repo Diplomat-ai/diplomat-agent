@@ -10,12 +10,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat_canary.models import Guard, Scenario, ScanResult, SideEffect, Tool
-from diplomat_canary.reporter.terminal import render_plain
-from diplomat_canary.reporter.json_report import render_json
-from diplomat_canary.analyzer.guards import apply_verdicts, build_summary
-from diplomat_canary.analyzer.scenarios import generate_scenarios
-from diplomat_canary.scanner.ast_scanner import scan_directory
+from agent_canary.models import Guard, Scenario, ScanResult, SideEffect, Tool
+from agent_canary.reporter.terminal import render_plain
+from agent_canary.reporter.json_report import render_json
+from agent_canary.analyzer.guards import apply_verdicts, build_summary
+from agent_canary.analyzer.scenarios import generate_scenarios
+from agent_canary.scanner.ast_scanner import scan_directory
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -53,7 +53,7 @@ class TestRenderPlain:
     def test_header_present(self):
         result = _make_handcrafted_result()
         output = render_plain(result, "./test/")
-        assert "🐤 diplomat-canary" in output
+        assert "🐤 agent-canary" in output
 
     def test_scanned_path_present(self):
         result = _make_handcrafted_result()

@@ -1,4 +1,4 @@
-"""Fake LangGraph agent workflows for testing diplomat-canary.
+"""Fake LangGraph agent workflows for testing agent-canary.
 
 This file contains workflow orchestration code. The scanner should
 detect side effects here too.

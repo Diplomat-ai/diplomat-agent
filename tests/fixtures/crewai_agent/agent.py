@@ -1,4 +1,4 @@
-"""Fake CrewAI support agent tools for testing diplomat-canary.
+"""Fake CrewAI support agent tools for testing agent-canary.
 
 These tools match the Phase 6 spec:
 - search_knowledge: read-only → LOW_RISK

@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat_canary.cli import main
+from agent_canary.cli import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -105,4 +105,4 @@ class TestVersion:
             main(["--version"])
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "diplomat-canary" in captured.out
+        assert "agent-canary" in captured.out

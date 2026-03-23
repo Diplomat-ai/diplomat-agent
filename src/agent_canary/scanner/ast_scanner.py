@@ -10,8 +10,8 @@ import ast
 import textwrap
 from pathlib import Path
 
-from diplomat_canary.models import Guard, SideEffect, Tool
-from diplomat_canary.scanner.patterns import (
+from agent_canary.models import Guard, SideEffect, Tool
+from agent_canary.scanner.patterns import (
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,

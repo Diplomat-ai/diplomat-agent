@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from diplomat_canary.models import ScanResult
+from agent_canary.models import ScanResult
 
 
 def render_json(result: ScanResult, scanned_path: str) -> str:
@@ -17,8 +17,6 @@ def render_json(result: ScanResult, scanned_path: str) -> str:
         "tools": [asdict(t) for t in result.tools],
         "scenarios": [asdict(s) for s in result.scenarios],
     }
-    if result.summary.get("unguarded", 0) > 0:
-        data["cta"] = "diplomat.run"
     return json.dumps(data, indent=2)
 
 

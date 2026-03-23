@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat_canary.scanner.ast_scanner import scan_file, scan_directory
-from diplomat_canary.analyzer.guards import apply_verdicts
+from agent_canary.scanner.ast_scanner import scan_file, scan_directory
+from agent_canary.analyzer.guards import apply_verdicts
 
 
 def _scan_code(code: str) -> list:
