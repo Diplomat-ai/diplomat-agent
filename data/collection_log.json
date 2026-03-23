@@ -1,0 +1,40 @@
+{
+  "session_date": "2026-03-22T22:15:03.329710+00:00",
+  "repos_queried": [
+    "langchain-ai/langgraph",
+    "crewAIInc/crewAI",
+    "microsoft/autogen"
+  ],
+  "api_calls_made": 175,
+  "issues_per_repo": {
+    "langchain-ai/langgraph": {
+      "open": 37,
+      "closed": 53,
+      "comments_fetched": 71,
+      "new": 90
+    },
+    "crewAIInc/crewAI": {
+      "open": 34,
+      "closed": 95,
+      "comments_fetched": 72,
+      "new": 129
+    },
+    "microsoft/autogen": {
+      "open": 5,
+      "closed": 0,
+      "comments_fetched": 4,
+      "new": 5
+    }
+  },
+  "errors": [],
+  "mcp_version": "curl-rest-api-v2",
+  "next_run_cursor": {},
+  "blind_spots": [],
+  "issues_per_repo_totals": {
+    "langchain-ai/langgraph": 169,
+    "crewAIInc/crewAI": 207,
+    "microsoft/autogen": 91
+  },
+  "total_new_raw": 224,
+  "total_new_classified": 163
+}
