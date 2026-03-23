@@ -1,4 +1,4 @@
-![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue) ![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green) ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
+![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue) ![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green) ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
 
 # agent-canary
 
