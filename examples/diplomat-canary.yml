@@ -1,0 +1,171 @@
+# diplomat-canary.yml
+# ─────────────────────────────────────────────────────────
+# Configuration manuelle pour un scan de gouvernance précis.
+#
+# Quand utiliser ce fichier :
+#   - Le scan auto (diplomat-canary ./mon_projet/) a raté des tools
+#   - Vos tools sont générés dynamiquement (MCP, OpenAPI, plugin system)
+#   - Vous voulez déclarer des guards que l'analyse statique ne détecte pas
+#   - Votre codebase n'est pas en Python
+#
+# Pour générer ce fichier automatiquement à partir de votre code :
+#   diplomat-canary --init ./mon_projet/
+#
+# Puis ajustez et relancez :
+#   diplomat-canary --config diplomat-canary.yml
+# ─────────────────────────────────────────────────────────
+
+agent:
+  name: "order-support-agent"       # nom libre, apparaît dans le rapport
+  framework: langgraph              # informatif uniquement — n'affecte pas le scan
+  description: "Agent de support e-commerce — gère les commandes, remboursements et comptes clients"
+
+tools:
+
+  # ──────────────────────────────
+  # Tool 1 — PAIEMENT, AUCUN GUARD
+  # ──────────────────────────────
+  # Ce tool sera marqué UNGUARDED : side-effect financier sans aucune protection.
+  - name: process_refund
+    file: "agents/tools.py"         # optionnel — aide à localiser dans le rapport
+    line: 42                        # optionnel
+    params:
+      - name: amount
+        type: float
+      - name: customer_id
+        type: string
+      - name: reason
+        type: string
+    side_effects:
+      - category: payment           # catégories : payment, database_write, database_delete,
+                                    #   http_write, email, publish, file_delete, destructive, read
+    guards: []                      # liste vide = aucun garde-fou déclaré
+
+  # ──────────────────────────────
+  # Tool 2 — ÉCRITURE DB, GUARD PARTIEL
+  # ──────────────────────────────
+  # Ce tool sera marqué PARTIALLY_GUARDED : il a une validation mais pas complète.
+  - name: update_order
+    file: "agents/tools.py"
+    params:
+      - name: order_id
+        type: string
+      - name: status
+        type: string
+      - name: notes
+        type: string
+    side_effects:
+      - category: database_write
+    guards:
+      - type: input_validation      # types : input_validation, rate_limit, auth_check,
+                                    #   approval_step, idempotency_key, retry_bound, confirmation
+        details: "status validé contre une liste de valeurs autorisées"
+        coverage: partial           # partial = protection incomplète, full = protection complète
+
+  # ──────────────────────────────
+  # Tool 3 — LECTURE SEULE
+  # ──────────────────────────────
+  # Ce tool sera marqué LOW_RISK : aucun side-effect réel.
+  - name: get_order_status
+    params:
+      - name: order_id
+        type: string
+    side_effects:
+      - category: read
+    guards: []                      # pas besoin de guards pour du read-only
+
+  # ──────────────────────────────
+  # Tool 4 — SUPPRESSION, AUCUN GUARD
+  # ──────────────────────────────
+  - name: delete_customer
+    file: "agents/tools.py"
+    params:
+      - name: customer_id
+        type: string
+    side_effects:
+      - category: database_delete
+    guards: []
+
+  # ──────────────────────────────
+  # Tool 5 — EMAIL, GUARD COMPLET
+  # ──────────────────────────────
+  # Ce tool sera marqué GUARDED : rate limit + auth en place.
+  - name: send_notification
+    file: "agents/notifications.py"
+    params:
+      - name: email
+        type: string
+      - name: message
+        type: string
+    side_effects:
+      - category: email
+    guards:
+      - type: rate_limit
+        details: "max 10 emails par minute par customer_id"
+        coverage: full
+      - type: auth_check
+        details: "vérifie que l'agent a le scope notifications:send"
+        coverage: full
+
+  # ──────────────────────────────
+  # Tool 6 — PUBLICATION, GUARD AVEC APPROVAL
+  # ──────────────────────────────
+  - name: publish_product_update
+    file: "agents/cms.py"
+    params:
+      - name: product_id
+        type: string
+      - name: title
+        type: string
+      - name: description
+        type: string
+      - name: price
+        type: float
+    side_effects:
+      - category: publish
+      - category: database_write    # un tool peut avoir plusieurs side-effects
+    guards:
+      - type: approval_step
+        details: "publication mise en file d'attente, validée par un opérateur humain"
+        coverage: full
+      - type: input_validation
+        details: "price validé avec Pydantic Field(gt=0, le=99999)"
+        coverage: full
+
+  # ──────────────────────────────
+  # Tool 7 — TOOL DYNAMIQUE (MCP / plugin)
+  # ──────────────────────────────
+  # Ce tool n'existe pas dans le code Python — il est chargé dynamiquement
+  # via MCP ou un plugin system. L'analyse AST ne peut pas le détecter.
+  # C'est exactement le cas où le YAML est indispensable.
+  - name: execute_sql_query
+    params:
+      - name: query
+        type: string
+      - name: database
+        type: string
+    side_effects:
+      - category: database_write    # le pire cas — la query peut être un INSERT/DELETE
+      - category: database_delete
+    guards:
+      - type: input_validation
+        details: "query filtrée par une allowlist de patterns SQL autorisés"
+        coverage: partial           # partial car la allowlist peut être contournée
+
+  # ──────────────────────────────
+  # Tool 8 — APPEL API EXTERNE
+  # ──────────────────────────────
+  - name: create_jira_ticket
+    params:
+      - name: project
+        type: string
+      - name: summary
+        type: string
+      - name: priority
+        type: string
+    side_effects:
+      - category: http_write
+    guards:
+      - type: rate_limit
+        details: "max 50 tickets par heure"
+        coverage: full
