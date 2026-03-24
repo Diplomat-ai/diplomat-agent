@@ -13,6 +13,7 @@ class SideEffect:
     evidence: str  # code excerpt proving the side effect
     line: int  # line number in the source file
     file: str  # path to the file
+    type: str = ""  # effect type from pattern category (same as category when set)
 
 
 @dataclass

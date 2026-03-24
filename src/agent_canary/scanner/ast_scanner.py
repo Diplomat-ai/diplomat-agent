@@ -407,6 +407,7 @@ class _SideEffectVisitor(ast.NodeVisitor):
                             evidence=_src(node, self.source_lines),
                             line=node.lineno,
                             file=self.file_path,
+                            type=pattern["category"],
                         )
                     )
         self.generic_visit(node)
@@ -635,14 +636,29 @@ def scan_directory(root: Path) -> list[Tool]:
 
     Excludes venv/, __pycache__/, .git/, node_modules/, migrations/,
     alembic/, test files, and similar.
+
+    After calling this function, the module-level ``last_scan_stats`` dict
+    is populated with ``files_scanned`` and ``files_skipped`` counts.
     """
+    global last_scan_stats
     tools: list[Tool] = []
+    files_scanned = 0
+    files_skipped = 0
 
-    for py_file in _iter_python_files(root):
-        file_tools = scan_file(py_file)
-        tools.extend(file_tools)
+    for py_file, included in _iter_all_python_files(root):
+        if included:
+            file_tools = scan_file(py_file)
+            tools.extend(file_tools)
+            files_scanned += 1
+        else:
+            files_skipped += 1
 
+    last_scan_stats = {"files_scanned": files_scanned, "files_skipped": files_skipped}
     return tools
+
+
+# Module-level stats populated by the last scan_directory() call
+last_scan_stats: dict[str, int] = {"files_scanned": 0, "files_skipped": 0}
 
 
 def _iter_python_files(root: Path):
@@ -654,3 +670,21 @@ def _iter_python_files(root: Path):
         elif item.is_file() and item.suffix == ".py":
             if not _should_exclude_file(item):
                 yield item
+
+
+def _iter_all_python_files(root: Path):
+    """Yield (path, included) for every .py file under root."""
+    for item in root.iterdir():
+        if item.is_dir():
+            if _should_exclude_dir(item.name):
+                # Count all .py files in excluded dirs as skipped
+                for sub in item.rglob("*.py"):
+                    if sub.is_file():
+                        yield sub, False
+            else:
+                yield from _iter_all_python_files(item)
+        elif item.is_file() and item.suffix == ".py":
+            if _should_exclude_file(item):
+                yield item, False
+            else:
+                yield item, True

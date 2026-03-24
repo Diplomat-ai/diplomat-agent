@@ -30,6 +30,7 @@ def _parse_side_effects(raw: list[dict], file_hint: str) -> list[SideEffect]:
                 evidence=item.get("evidence", f"declared in {file_hint}"),
                 line=item.get("line", 0),
                 file=item.get("file", file_hint),
+                type=category,
             )
         )
     return effects

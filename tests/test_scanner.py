@@ -441,3 +441,246 @@ class TestFailOnUnguarded:
         )
         exit_code = main([str(tmp_path), "--fail-on-unguarded", "--format", "json"])
         assert exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# 8. Effect type is properly categorized (FIX 1)
+# ---------------------------------------------------------------------------
+
+
+class TestEffectType:
+    VALID_TYPES = {
+        "database_write", "database_delete", "http_write", "payment",
+        "email", "messaging", "publish", "llm_call", "agent_invocation",
+        "file_delete", "destructive", "dynamic_code",
+    }
+
+    def test_effect_type_is_categorized(self):
+        """Effects from AST scanner must have a specific type, not 'unknown'."""
+        tools = scan_directory(LANGGRAPH)
+        for tool in tools:
+            for effect in tool.side_effects:
+                assert effect.type != "unknown", (
+                    f"{tool.name}: effect has type='unknown'"
+                )
+                assert effect.type != "", (
+                    f"{tool.name}: effect has empty type"
+                )
+                assert effect.type in self.VALID_TYPES, (
+                    f"{tool.name}: unexpected type '{effect.type}'"
+                )
+
+    def test_effect_type_payment(self):
+        """stripe.Refund.create must have type='payment'."""
+        tools = scan_directory(LANGGRAPH)
+        by_name = {t.name: t for t in tools}
+        tool = by_name["process_refund"]
+        types = {e.type for e in tool.side_effects}
+        assert "payment" in types
+
+    def test_effect_type_database_write(self):
+        """session.commit() must have type='database_write'."""
+        tools = scan_directory(LANGGRAPH)
+        by_name = {t.name: t for t in tools}
+        tool = by_name["update_order"]
+        types = {e.type for e in tool.side_effects}
+        assert "database_write" in types
+
+    def test_effect_type_email(self):
+        """smtp.sendmail() must have type='email'."""
+        tools = scan_directory(LANGGRAPH)
+        by_name = {t.name: t for t in tools}
+        tool = by_name["send_notification"]
+        types = {e.type for e in tool.side_effects}
+        assert "email" in types
+
+    def test_effect_type_llm_call(self):
+        """litellm.acompletion() must have type='llm_call'."""
+        tools = scan_file(FIXTURES / "llm_calls.py")
+        types = set()
+        for tool in tools:
+            for e in tool.side_effects:
+                types.add(e.type)
+        assert "llm_call" in types
+
+    def test_effect_type_in_json_output(self):
+        """The 'type' field must appear in JSON report output."""
+        tools = scan_directory(LANGGRAPH)
+        apply_verdicts(tools)
+        scenarios = generate_scenarios(tools)
+        summary = build_summary(tools)
+        result = ScanResult(tools=tools, scenarios=scenarios, summary=summary)
+        output = render_json(result, str(LANGGRAPH))
+        data = json.loads(output)
+        for t in data["tools"]:
+            for e in t["side_effects"]:
+                assert "type" in e, f"Missing 'type' key in side_effect of {t['name']}"
+                assert e["type"] != "unknown"
+                assert e["type"] != ""
+
+
+# ---------------------------------------------------------------------------
+# 9. Additional excluded directories (FIX 2)
+# ---------------------------------------------------------------------------
+
+
+class TestNewExclusions:
+    def test_excludes_examples_dir(self, tmp_path):
+        """Files in examples/ must not be scanned."""
+        ex_dir = tmp_path / "examples"
+        ex_dir.mkdir()
+        f = ex_dir / "demo_tool.py"
+        f.write_text(
+            "import stripe\n"
+            "def demo_refund(amount):\n"
+            "    stripe.Refund.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "demo_refund" not in names
+
+    def test_excludes_benchmarks_dir(self, tmp_path):
+        """Files in benchmarks/ must not be scanned."""
+        bench_dir = tmp_path / "benchmarks"
+        bench_dir.mkdir()
+        f = bench_dir / "bench_tool.py"
+        f.write_text(
+            "import stripe\n"
+            "def bench_refund(amount):\n"
+            "    stripe.Refund.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "bench_refund" not in names
+
+    def test_excludes_evals_dir(self, tmp_path):
+        """Files in evals/ must not be scanned."""
+        evals_dir = tmp_path / "evals"
+        evals_dir.mkdir()
+        f = evals_dir / "eval_tool.py"
+        f.write_text(
+            "import stripe\n"
+            "def eval_refund(amount):\n"
+            "    stripe.Refund.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "eval_refund" not in names
+
+    def test_excludes_demos_dir(self, tmp_path):
+        """Files in demos/ must not be scanned."""
+        demos_dir = tmp_path / "demos"
+        demos_dir.mkdir()
+        f = demos_dir / "show.py"
+        f.write_text(
+            "import stripe\n"
+            "def show_refund(amount):\n"
+            "    stripe.Refund.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "show_refund" not in names
+
+    def test_excludes_nested_examples_dir(self, tmp_path):
+        """Files in src/app/examples/ (nested) must be excluded."""
+        nested = tmp_path / "src" / "app" / "examples"
+        nested.mkdir(parents=True)
+        f = nested / "sample.py"
+        f.write_text(
+            "import stripe\n"
+            "def sample_charge(amount):\n"
+            "    stripe.Charge.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "sample_charge" not in names
+
+    def test_does_not_exclude_tools_dir(self, tmp_path):
+        """Files in tools/ MUST be scanned (production code)."""
+        tools_dir = tmp_path / "tools"
+        tools_dir.mkdir()
+        f = tools_dir / "payment.py"
+        f.write_text(
+            "import stripe\n"
+            "def real_refund(amount):\n"
+            "    stripe.Refund.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "real_refund" in names
+
+    def test_does_not_exclude_utils_dir(self, tmp_path):
+        """Files in utils/ MUST be scanned (production code)."""
+        utils_dir = tmp_path / "utils"
+        utils_dir.mkdir()
+        f = utils_dir / "helpers.py"
+        f.write_text(
+            "import stripe\n"
+            "def helper_charge(amount):\n"
+            "    stripe.Charge.create(amount=amount)\n"
+        )
+        tools = scan_directory(tmp_path)
+        names = {t.name for t in tools}
+        assert "helper_charge" in names
+
+
+# ---------------------------------------------------------------------------
+# 10. Summary includes files_scanned / files_skipped (AMÉLIORATION 3)
+# ---------------------------------------------------------------------------
+
+
+class TestSummaryFileStats:
+    def test_summary_has_files_scanned(self):
+        """Summary must include files_scanned count."""
+        tools = scan_directory(LANGGRAPH)
+        apply_verdicts(tools)
+        from agent_canary.scanner.ast_scanner import last_scan_stats
+        summary = build_summary(tools, file_stats=last_scan_stats)
+        assert "files_scanned" in summary
+        assert summary["files_scanned"] > 0
+
+    def test_summary_has_files_skipped(self):
+        """Summary must include files_skipped count."""
+        tools = scan_directory(LANGGRAPH)
+        apply_verdicts(tools)
+        from agent_canary.scanner.ast_scanner import last_scan_stats
+        summary = build_summary(tools, file_stats=last_scan_stats)
+        assert "files_skipped" in summary
+
+    def test_summary_file_stats_in_json(self):
+        """files_scanned and files_skipped must appear in JSON output."""
+        tools = scan_directory(LANGGRAPH)
+        apply_verdicts(tools)
+        from agent_canary.scanner.ast_scanner import last_scan_stats
+        scenarios = generate_scenarios(tools)
+        summary = build_summary(tools, file_stats=last_scan_stats)
+        result = ScanResult(tools=tools, scenarios=scenarios, summary=summary)
+        output = render_json(result, str(LANGGRAPH))
+        data = json.loads(output)
+        s = data["summary"]
+        assert "files_scanned" in s
+        assert "files_skipped" in s
+        assert s["files_scanned"] > 0
+
+    def test_skipped_counts_excluded_dirs(self, tmp_path):
+        """files_skipped must count .py files in excluded directories."""
+        # Create a production file
+        prod = tmp_path / "app.py"
+        prod.write_text(
+            "import stripe\n"
+            "def pay(amount):\n"
+            "    stripe.Charge.create(amount=amount)\n"
+        )
+        # Create an excluded file
+        ex_dir = tmp_path / "examples"
+        ex_dir.mkdir()
+        ex_file = ex_dir / "demo.py"
+        ex_file.write_text(
+            "import stripe\n"
+            "def demo(amount):\n"
+            "    stripe.Charge.create(amount=amount)\n"
+        )
+        scan_directory(tmp_path)
+        from agent_canary.scanner.ast_scanner import last_scan_stats
+        assert last_scan_stats["files_scanned"] == 1
+        assert last_scan_stats["files_skipped"] == 1

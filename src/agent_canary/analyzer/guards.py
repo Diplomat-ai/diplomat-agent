@@ -54,18 +54,26 @@ def apply_verdicts(tools: list[Tool]) -> list[Tool]:
     return tools
 
 
-def build_summary(tools: list[Tool]) -> dict:
-    """Build the summary dict from a list of tools with verdicts applied."""
+def build_summary(tools: list[Tool], file_stats: dict[str, int] | None = None) -> dict:
+    """Build the summary dict from a list of tools with verdicts applied.
+
+    Args:
+        tools: List of Tool objects with verdicts already applied.
+        file_stats: Optional dict with ``files_scanned`` and ``files_skipped`` counts.
+    """
     total = len(tools)
     unguarded = sum(1 for t in tools if t.verdict == "UNGUARDED")
     partially = sum(1 for t in tools if t.verdict == "PARTIALLY_GUARDED")
     guarded = sum(1 for t in tools if t.verdict == "GUARDED")
     low_risk = sum(1 for t in tools if t.verdict == "LOW_RISK")
 
-    return {
+    summary: dict = {
+        "files_scanned": file_stats.get("files_scanned", 0) if file_stats else 0,
+        "files_skipped": file_stats.get("files_skipped", 0) if file_stats else 0,
         "total_tools": total,
         "unguarded": unguarded,
         "partially_guarded": partially,
         "guarded": guarded,
         "low_risk": low_risk,
     }
+    return summary

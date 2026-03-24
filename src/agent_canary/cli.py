@@ -92,10 +92,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_auto_scan(path: Path) -> list:
-    """Run mode 1: AST auto-detection."""
-    from agent_canary.scanner.ast_scanner import scan_directory
-    return scan_directory(path)
+def _run_auto_scan(path: Path) -> tuple[list, dict[str, int]]:
+    """Run mode 1: AST auto-detection. Returns (tools, file_stats)."""
+    from agent_canary.scanner.ast_scanner import scan_directory, last_scan_stats
+    tools = scan_directory(path)
+    return tools, dict(last_scan_stats)
 
 
 def _run_yaml_scan(config_path: Path) -> list:
@@ -118,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     # --- Determine scan target ---
+    file_stats: dict[str, int] | None = None
     if args.config:
         config_path = Path(args.config)
         if not config_path.exists():
@@ -141,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: path is not a directory: {scan_root}", file=sys.stderr)
             return 2
         scanned_path = str(scan_root)
-        tools = _run_auto_scan(scan_root)
+        tools, file_stats = _run_auto_scan(scan_root)
 
     # --- Apply verdicts ---
     apply_verdicts(tools)
@@ -153,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- Build result ---
     scenarios = generate_scenarios(tools)
-    summary = build_summary(tools)
+    summary = build_summary(tools, file_stats=file_stats)
     result = ScanResult(tools=tools, scenarios=scenarios, summary=summary)
 
     # --- Handle --init mode ---

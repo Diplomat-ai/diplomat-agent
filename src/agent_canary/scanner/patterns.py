@@ -653,6 +653,9 @@ EXCLUDED_DIRS: frozenset[str] = frozenset({
     "migrations", "alembic", ".tox", ".mypy_cache", ".ruff_cache",
     "dist", "build", "site-packages", ".pytest_cache",
     "tests", "test", "testing", "fixtures",
+    "examples", "example", "benchmarks", "benchmark",
+    "evals", "eval", "demos", "demo",
+    "docs", "doc", "scripts",
 })
 
 # File patterns to exclude from scanning
