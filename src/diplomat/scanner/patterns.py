@@ -429,6 +429,15 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
             "attr_exact": ["analyze", "execute", "process"],
         },
     },
+    {
+        # OpenAI Agents SDK: Runner.run_sync(), Runner.run()
+        "category": "agent_invocation",
+        "risk": 2,
+        "match": {
+            "obj_contains": ["runner"],
+            "attr_exact": ["run_sync", "run"],
+        },
+    },
 
     # -----------------------------------------------------------------------
     # LLM Call — direct SDK calls and custom wrappers

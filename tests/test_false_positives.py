@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import textwrap
 import os
 from pathlib import Path
 
@@ -956,3 +957,32 @@ class TestDynamicCodeFixture:
         assert "safe_import" in self.tools
         cats = {se.category for se in self.tools["safe_import"].side_effects}
         assert "destructive" in cats
+
+
+class TestOpenAIAgentsSDK:
+    """Tests for OpenAI Agents SDK Runner.run_sync detection."""
+
+    @classmethod
+    def setup_class(cls):
+        code = textwrap.dedent("""\
+            from agents import Agent, Runner
+
+            def run_openai_agent(user_input: str):
+                agent = Agent(name="assistant", instructions="You help users.")
+                result = Runner.run_sync(agent, user_input)
+                return result
+        """)
+        cls.tools = {t.name: t for t in _scan_code(code)}
+
+    def test_runner_run_sync_detected(self):
+        """Runner.run_sync must be detected as agent_invocation."""
+        assert "run_openai_agent" in self.tools
+        tool = self.tools["run_openai_agent"]
+        cats = {se.category for se in tool.side_effects}
+        assert "agent_invocation" in cats
+
+    def test_runner_run_sync_unguarded(self):
+        """Runner.run_sync with no checks must be UNGUARDED."""
+        tool = self.tools["run_openai_agent"]
+        apply_verdicts([tool])
+        assert tool.verdict == "UNGUARDED"
