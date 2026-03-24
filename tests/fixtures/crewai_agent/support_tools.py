@@ -1,4 +1,4 @@
-"""Fake CrewAI support agent tools for testing diplomat.
+"""Fake CrewAI support agent tools for testing diplomat-agent.
 
 Tools use CrewAI-style patterns but the scanner must detect them
 purely via side-effect patterns, not framework decorators.

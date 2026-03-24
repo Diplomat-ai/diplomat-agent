@@ -1,4 +1,4 @@
-"""Shared dataclasses for diplomat."""
+"""Shared dataclasses for diplomat-agent."""
 
 from __future__ import annotations
 

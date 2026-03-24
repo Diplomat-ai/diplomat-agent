@@ -9,10 +9,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat.models import Guard, Scenario, SideEffect, Tool
-from diplomat.analyzer.guards import apply_verdicts, build_summary, compute_verdict
-from diplomat.analyzer.scenarios import generate_scenarios
-from diplomat.scanner.ast_scanner import scan_directory
+from diplomat_agent.models import Guard, Scenario, SideEffect, Tool
+from diplomat_agent.analyzer.guards import apply_verdicts, build_summary, compute_verdict
+from diplomat_agent.analyzer.scenarios import generate_scenarios
+from diplomat_agent.scanner.ast_scanner import scan_directory
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CREWAI = FIXTURES / "crewai_agent"
@@ -159,7 +159,7 @@ class TestGenerateScenarios:
 
 class TestCrewAIFixtureVerdicts:
     def setup_method(self):
-        from diplomat.scanner.ast_scanner import scan_file
+        from diplomat_agent.scanner.ast_scanner import scan_file
         tools = scan_file(CREWAI / "agent.py")
         apply_verdicts(tools)
         self.tools = {t.name: t for t in tools}
@@ -184,7 +184,7 @@ class TestCrewAIFixtureVerdicts:
 
 class TestRawPythonServicesVerdicts:
     def setup_method(self):
-        from diplomat.scanner.ast_scanner import scan_file
+        from diplomat_agent.scanner.ast_scanner import scan_file
         tools = scan_file(RAW_PYTHON / "services.py")
         apply_verdicts(tools)
         self.tools = {t.name: t for t in tools}

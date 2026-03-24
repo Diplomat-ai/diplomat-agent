@@ -10,8 +10,8 @@ import ast
 import textwrap
 from pathlib import Path
 
-from diplomat.models import Guard, SideEffect, Tool
-from diplomat.scanner.patterns import (
+from diplomat_agent.models import Guard, SideEffect, Tool
+from diplomat_agent.scanner.patterns import (
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,

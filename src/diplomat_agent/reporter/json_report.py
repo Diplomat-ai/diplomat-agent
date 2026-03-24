@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from diplomat.models import ScanResult
+from diplomat_agent.models import ScanResult
 
 
 def render_json(result: ScanResult, scanned_path: str) -> str:

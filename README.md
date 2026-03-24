@@ -1,8 +1,8 @@
-# diplomat
+# diplomat-agent
 
 Find every tool call in your AI agent that can change the real world.
 
-`diplomat` is a static scanner for Python AI agents. It maps every function that writes to a database, calls an external API, sends an email, invokes another agent, or deletes data — and tells you which ones have no checks.
+`diplomat-agent` is a static scanner for Python AI agents. It maps every function that writes to a database, calls an external API, sends an email, invokes another agent, or deletes data — and tells you which ones have no checks.
 
 ## What it finds
 
@@ -24,14 +24,14 @@ One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets
 ## Quick start
 
 ```bash
-pip install diplomat
-diplomat scan .
+pip install diplomat-agent
+diplomat-agent scan .
 ```
 
 Output:
 
 ```
-diplomat — governance scan
+diplomat-agent — governance scan
 
 Scanned: ./my-agent
 Tool calls with side effects: 12
@@ -88,8 +88,8 @@ Add to your CI pipeline:
 ```yaml
 - name: Diplomat governance scan
   run: |
-    pip install diplomat
-    diplomat scan . --fail-on-unchecked
+    pip install diplomat-agent
+    diplomat-agent scan . --fail-on-unchecked
 ```
 
 `--fail-on-unchecked` blocks the PR if there are new unreviewed tool calls.
@@ -99,7 +99,7 @@ If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings
 ### Generate the registry
 
 ```bash
-diplomat scan . --format registry --output-registry toolcalls.yaml
+diplomat-agent scan . --format registry --output-registry toolcalls.yaml
 ```
 
 Commit `toolcalls.yaml` to your repo. Review changes in PRs. The file is a mirror of what your agent can do — it updates on every scan.

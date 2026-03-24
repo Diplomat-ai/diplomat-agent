@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from diplomat.models import ScanResult, Tool
-from diplomat.analyzer.scenarios import estimate_total_financial_exposure
-from diplomat.reporter.terminal import (
+from diplomat_agent.models import ScanResult, Tool
+from diplomat_agent.analyzer.scenarios import estimate_total_financial_exposure
+from diplomat_agent.reporter.terminal import (
     _category_label,
     _category_risk_hint,
     _format_params,
@@ -27,7 +27,7 @@ def render_markdown(result: ScanResult, scanned_path: str) -> str:
     """Render the full report as a Markdown string."""
     lines: list[str] = []
 
-    lines.append("# diplomat — Governance Report")
+    lines.append("# diplomat-agent — Governance Report")
     lines.append("")
     lines.append(f"**Scanned:** `{scanned_path}`  ")
     lines.append(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  ")

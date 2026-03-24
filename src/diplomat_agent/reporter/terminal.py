@@ -9,8 +9,8 @@ from __future__ import annotations
 import sys
 from io import StringIO
 
-from diplomat.models import ScanResult, Tool
-from diplomat.analyzer.scenarios import estimate_total_financial_exposure
+from diplomat_agent.models import ScanResult, Tool
+from diplomat_agent.analyzer.scenarios import estimate_total_financial_exposure
 
 # Try importing rich; gracefully degrade if not installed
 try:
@@ -170,7 +170,7 @@ def render_plain(result: ScanResult, scanned_path: str) -> str:
     def w(line: str = "") -> None:
         buf.write(line + "\n")
 
-    w("diplomat — governance scan")
+    w("diplomat-agent — governance scan")
     w()
     w(f"Scanned: {scanned_path}")
 
@@ -220,7 +220,7 @@ def _render_rich(result: ScanResult, scanned_path: str) -> None:
     console = Console()
 
     console.print()
-    console.print("[bold yellow]diplomat[/bold yellow] — governance scan")
+    console.print("[bold yellow]diplomat-agent[/bold yellow] — governance scan")
     console.print()
     console.print(f"Scanned: [cyan]{scanned_path}[/cyan]")
 

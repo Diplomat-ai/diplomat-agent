@@ -1,4 +1,4 @@
-"""Plain Python agent tools (no framework) for testing diplomat.
+"""Plain Python agent tools (no framework) for testing diplomat-agent.
 
 Uses requests, SQLAlchemy-style patterns, and stripe directly.
 """

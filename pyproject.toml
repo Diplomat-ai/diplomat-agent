@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "diplomat"
+name = "diplomat-agent"
 version = "0.1.0"
 description = "Scan your agentic codebase for unguarded tool calls with real-world side effects"
 readme = "README.md"
@@ -22,14 +22,14 @@ dev = [
 ]
 
 [project.scripts]
-diplomat = "diplomat.cli:main"
+diplomat-agent = "diplomat_agent.cli:main"
 
 [project.urls]
 Homepage = "https://diplomat.run"
-Repository = "https://github.com/diplomat-ai/diplomat"
+Repository = "https://github.com/diplomat-ai/diplomat-agent"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/diplomat"]
+packages = ["src/diplomat_agent"]
 
 [tool.ruff]
 line-length = 100

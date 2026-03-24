@@ -1,1 +1,0 @@
-"""Analyzer package for diplomat."""

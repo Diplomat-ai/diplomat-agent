@@ -1,6 +1,6 @@
 """YAML-based scanner — Mode 2.
 
-Reads a diplomat.yml config file and produces Tool objects
+Reads a diplomat-agent.yml config file and produces Tool objects
 without AST analysis.
 """
 
@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from diplomat.models import Guard, SideEffect, Tool
+from diplomat_agent.models import Guard, SideEffect, Tool
 
 _YAML_MISSING_MSG = (
     "PyYAML is not installed. Install it with:\n"
     "    pip install pyyaml\n"
     "\n"
-    "Alternatively, use JSON mode: diplomat --config config.json\n"
+    "Alternatively, use JSON mode: diplomat-agent --config config.json\n"
 )
 
 
@@ -64,7 +64,7 @@ def _parse_params(raw: list[dict]) -> list[dict]:
 
 
 def load_yaml_config(config_path: Path) -> list[Tool]:
-    """Parse a diplomat.yml file and return Tool objects.
+    """Parse a diplomat-agent.yml file and return Tool objects.
 
     Requires PyYAML to be installed.
 
@@ -125,7 +125,7 @@ def load_yaml_config(config_path: Path) -> list[Tool]:
 
 
 def generate_yaml_config(tools: list[Tool], output_path: Path) -> None:
-    """Write a diplomat.yml pre-populated from AST-detected tools.
+    """Write a diplomat-agent.yml pre-populated from AST-detected tools.
 
     Falls back to a JSON-like YAML if PyYAML is not installed.
 

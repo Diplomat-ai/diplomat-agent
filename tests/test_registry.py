@@ -9,12 +9,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat.scanner.ast_scanner import scan_directory
-from diplomat.analyzer.guards import apply_verdicts, build_summary
-from diplomat.analyzer.scenarios import generate_scenarios
-from diplomat.analyzer.checks import apply_missing_hints
-from diplomat.models import ScanResult
-from diplomat.reporter.registry import generate, load_baseline
+from diplomat_agent.scanner.ast_scanner import scan_directory
+from diplomat_agent.analyzer.guards import apply_verdicts, build_summary
+from diplomat_agent.analyzer.scenarios import generate_scenarios
+from diplomat_agent.analyzer.checks import apply_missing_hints
+from diplomat_agent.models import ScanResult
+from diplomat_agent.reporter.registry import generate, load_baseline
 
 FIXTURES = Path(__file__).parent / "fixtures"
 LANGGRAPH = FIXTURES / "langgraph_agent"
@@ -155,7 +155,7 @@ class TestRegistryConfirmed:
 class TestFailOnUnchecked:
     def test_fail_on_unchecked_baseline(self, tmp_path):
         """CI blocks only NEW findings absent from baseline."""
-        from diplomat.cli import main
+        from diplomat_agent.cli import main
 
         # 1. Generate baseline from langgraph fixture
         baseline = tmp_path / "toolcalls.yaml"
@@ -178,7 +178,7 @@ class TestFailOnUnchecked:
 
     def test_fail_on_unchecked_no_baseline(self, tmp_path):
         """Without baseline, --fail-on-unchecked blocks on any unchecked tool."""
-        from diplomat.cli import main
+        from diplomat_agent.cli import main
 
         # Point to a non-existent baseline
         baseline = tmp_path / "nonexistent.yaml"

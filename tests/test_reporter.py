@@ -10,12 +10,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from diplomat.models import Guard, Scenario, ScanResult, SideEffect, Tool
-from diplomat.reporter.terminal import render_plain
-from diplomat.reporter.json_report import render_json
-from diplomat.analyzer.guards import apply_verdicts, build_summary
-from diplomat.analyzer.scenarios import generate_scenarios
-from diplomat.scanner.ast_scanner import scan_directory
+from diplomat_agent.models import Guard, Scenario, ScanResult, SideEffect, Tool
+from diplomat_agent.reporter.terminal import render_plain
+from diplomat_agent.reporter.json_report import render_json
+from diplomat_agent.analyzer.guards import apply_verdicts, build_summary
+from diplomat_agent.analyzer.scenarios import generate_scenarios
+from diplomat_agent.scanner.ast_scanner import scan_directory
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -53,7 +53,7 @@ class TestRenderPlain:
     def test_header_present(self):
         result = _make_handcrafted_result()
         output = render_plain(result, "./test/")
-        assert "diplomat" in output
+        assert "diplomat-agent" in output
 
     def test_scanned_path_present(self):
         result = _make_handcrafted_result()

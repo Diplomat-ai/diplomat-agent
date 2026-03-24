@@ -1,4 +1,4 @@
-"""Fake CrewAI support agent tools for testing diplomat.
+"""Fake CrewAI support agent tools for testing diplomat-agent.
 
 These tools match the Phase 6 spec:
 - search_knowledge: read-only → LOW_RISK
