@@ -5,7 +5,7 @@ Scenarios are conservative order-of-magnitude estimates, not precise calculation
 
 from __future__ import annotations
 
-from agent_canary.models import Scenario, Tool
+from diplomat.models import Scenario, Tool
 
 # Conservative constants for scenario generation
 _N_ACTIONS = 200        # actions an agent loop might take in 10 minutes

@@ -1,4 +1,4 @@
-"""Shared dataclasses for agent-canary."""
+"""Shared dataclasses for diplomat."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class Tool:
     missing_hints: list[str] = field(default_factory=list)  # ["no bounds on amount", "no rate limit"]
     auto_retried: bool = False
     auto_retry_decorator: str = ""
-    ignored: bool = False  # True when # canary:ok or # checked:ok is present
+    ignored: bool = False  # True when # diplomat:ok, # canary:ok, or # checked:ok is present
     ignore_reason: str = ""  # text after the marker, e.g. "validated at API layer"
 
 

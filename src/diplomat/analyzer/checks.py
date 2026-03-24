@@ -7,7 +7,7 @@ the report so the developer knows exactly what to add — not a product pitch.
 
 from __future__ import annotations
 
-from agent_canary.models import Tool
+from diplomat.models import Tool
 
 # Param names that strongly imply a numeric / bounded value
 _NUMERIC_PARAM_NAMES: frozenset[str] = frozenset({

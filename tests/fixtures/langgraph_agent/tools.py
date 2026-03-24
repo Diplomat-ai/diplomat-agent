@@ -1,4 +1,4 @@
-"""Fake LangGraph e-commerce agent tools for testing agent-canary.
+"""Fake LangGraph e-commerce agent tools for testing diplomat.
 
 This file intentionally contains tools with various governance postures:
 - process_refund: payment, UNGUARDED

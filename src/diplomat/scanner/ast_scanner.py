@@ -10,8 +10,8 @@ import ast
 import textwrap
 from pathlib import Path
 
-from agent_canary.models import Guard, SideEffect, Tool
-from agent_canary.scanner.patterns import (
+from diplomat.models import Guard, SideEffect, Tool
+from diplomat.scanner.patterns import (
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
@@ -515,14 +515,14 @@ def _analyze_function(
         if auto_retried:
             break
 
-    # --- Detect # canary:ok / # checked:ok inline comments ---
+    # --- Detect # diplomat:ok / # canary:ok / # checked:ok inline comments ---
     ignored = False
     ignore_reason = ""
     for se in write_effects:
         line_idx = se.line - 1
         if 0 <= line_idx < len(source_lines):
             line_text = source_lines[line_idx]
-            for marker in ("canary:ok", "checked:ok"):
+            for marker in ("diplomat:ok", "canary:ok", "checked:ok"):
                 if marker in line_text:
                     ignored = True
                     # Extract reason after the marker
@@ -544,7 +544,7 @@ def _analyze_function(
         for check_line in (func_node.lineno - 1, func_node.lineno - 2):
             if 0 <= check_line < len(source_lines):
                 line_text = source_lines[check_line]
-                for marker in ("canary:ok", "checked:ok"):
+                for marker in ("diplomat:ok", "canary:ok", "checked:ok"):
                     if marker in line_text:
                         ignored = True
                         after = line_text.split(marker, 1)[1].strip()

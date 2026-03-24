@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from agent_canary.models import ScanResult
+from diplomat.models import ScanResult
 
 
 def render_json(result: ScanResult, scanned_path: str) -> str:
@@ -27,7 +27,7 @@ def write_json_report(
 ) -> Path:
     """Write the JSON report to disk and return the file path."""
     if output_path is None:
-        output_path = Path("canary-report.json")
+        output_path = Path("diplomat-report.json")
 
     content = render_json(result, scanned_path)
     output_path.write_text(content, encoding="utf-8")

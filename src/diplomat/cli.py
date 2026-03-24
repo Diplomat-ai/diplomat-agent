@@ -1,4 +1,4 @@
-"""CLI entry point for agent-canary.
+"""CLI entry point for diplomat.
 
 Parses arguments and routes to the appropriate scan mode.
 """
@@ -9,16 +9,16 @@ import argparse
 import sys
 from pathlib import Path
 
-from agent_canary import __version__
-from agent_canary.models import ScanResult
-from agent_canary.analyzer.guards import apply_verdicts, build_summary
-from agent_canary.analyzer.scenarios import generate_scenarios
-from agent_canary.analyzer.checks import apply_missing_hints
+from diplomat import __version__
+from diplomat.models import ScanResult
+from diplomat.analyzer.guards import apply_verdicts, build_summary
+from diplomat.analyzer.scenarios import generate_scenarios
+from diplomat.analyzer.checks import apply_missing_hints
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="agent-canary",
+        prog="diplomat",
         description=(
             "Scan your agentic codebase for tool calls with real-world side effects "
             "and no governance. No config required."
@@ -34,12 +34,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         metavar="FILE",
-        help="Path to agent-canary.yml (mode 2: explicit config)",
+        help="Path to diplomat config (mode 2: explicit config)",
     )
     parser.add_argument(
         "--init",
         action="store_true",
-        help="Generate agent-canary.yml from scan results and exit",
+        help="Generate config from scan results and exit",
     )
     parser.add_argument(
         "--format",
@@ -87,21 +87,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"agent-canary {__version__}",
+        version=f"diplomat {__version__}",
     )
     return parser
 
 
 def _run_auto_scan(path: Path) -> tuple[list, dict[str, int]]:
     """Run mode 1: AST auto-detection. Returns (tools, file_stats)."""
-    from agent_canary.scanner.ast_scanner import scan_directory, last_scan_stats
+    from diplomat.scanner.ast_scanner import scan_directory, last_scan_stats
     tools = scan_directory(path)
     return tools, dict(last_scan_stats)
 
 
 def _run_yaml_scan(config_path: Path) -> list:
     """Run mode 2: YAML config."""
-    from agent_canary.scanner.yaml_scanner import load_yaml_config
+    from diplomat.scanner.yaml_scanner import load_yaml_config
     return load_yaml_config(config_path)
 
 
@@ -160,15 +160,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- Handle --init mode ---
     if args.init:
-        from agent_canary.scanner.yaml_scanner import generate_yaml_config
-        output_path = Path("agent-canary.yml")
+        from diplomat.scanner.yaml_scanner import generate_yaml_config
+        output_path = Path("diplomat.yml")
         generate_yaml_config(tools, output_path)
         print(f"Generated config: {output_path}", file=sys.stderr)
         print(
             "Edit the file to adjust side effects and guards, then run:",
             file=sys.stderr,
         )
-        print(f"  agent-canary --config {output_path}", file=sys.stderr)
+        print(f"  diplomat --config {output_path}", file=sys.stderr)
         return 0
 
     # --- Produce output ---
@@ -178,10 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.format != "registry":
         if args.format == "terminal":
             if output_file:
-                from agent_canary.reporter.terminal import render_plain
+                from diplomat.reporter.terminal import render_plain
                 _write_output(render_plain(result, scanned_path), output_file)
             else:
-                from agent_canary.reporter.terminal import print_report
+                from diplomat.reporter.terminal import print_report
                 print_report(
                     result,
                     scanned_path,
@@ -189,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
         elif args.format == "markdown":
-            from agent_canary.reporter.markdown import render_markdown
+            from diplomat.reporter.markdown import render_markdown
             content = render_markdown(result, scanned_path)
             if output_file:
                 _write_output(content, output_file)
@@ -197,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stdout.write(content)
 
         elif args.format == "json":
-            from agent_canary.reporter.json_report import render_json
+            from diplomat.reporter.json_report import render_json
             content = render_json(result, scanned_path)
             if output_file:
                 _write_output(content, output_file)
@@ -210,12 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     if fail_on:
         baseline_path = Path(args.output_registry or "toolcalls.yaml")
         if baseline_path.exists():
-            from agent_canary.reporter.registry import load_baseline
+            from diplomat.reporter.registry import load_baseline
             baseline_entries = load_baseline(baseline_path)
 
     # Registry output
     if args.format == "registry" or args.output_registry:
-        from agent_canary.reporter.registry import generate
+        from diplomat.reporter.registry import generate
         registry_path = args.output_registry or "toolcalls.yaml"
         generate(result, output_path=registry_path, scanned_path=scanned_path)
         print(f"\n→ Tool call map written to {registry_path}", file=sys.stderr)

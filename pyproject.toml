@@ -3,12 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-canary"
+name = "diplomat"
 version = "0.1.0"
 description = "Scan your agentic codebase for unguarded tool calls with real-world side effects"
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = []  # zero mandatory runtime dependencies — stdlib only
 
 [project.optional-dependencies]
@@ -22,18 +22,18 @@ dev = [
 ]
 
 [project.scripts]
-agent-canary = "agent_canary.cli:main"
+diplomat = "diplomat.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Diplomat-agents/agent-canary"
-Repository = "https://github.com/Diplomat-agents/agent-canary"
+Homepage = "https://diplomat.run"
+Repository = "https://github.com/diplomat-ai/diplomat"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_canary"]
+packages = ["src/diplomat"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

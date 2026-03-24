@@ -5,7 +5,7 @@ Assigns a governance verdict to each Tool based on its side effects and guards.
 
 from __future__ import annotations
 
-from agent_canary.models import Tool
+from diplomat.models import Tool
 
 
 def compute_verdict(tool: Tool) -> str:
