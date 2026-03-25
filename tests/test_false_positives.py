@@ -289,6 +289,82 @@ def call_func(callback):
 """)
         assert len(tools) == 0
 
+    def test_crew_kickoff_detected(self):
+        code = textwrap.dedent("""\
+            def run_crew():
+                crew.kickoff()
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_crew_kickoff_async_detected(self):
+        code = textwrap.dedent("""\
+            async def run_crew():
+                await crew.kickoff_async()
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_crew_kickoff_for_each_detected(self):
+        code = textwrap.dedent("""\
+            def run_crew(inputs):
+                crew.kickoff_for_each(inputs=inputs)
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_autogen_initiate_chat_detected(self):
+        code = textwrap.dedent("""\
+            def run_autogen():
+                assistant.initiate_chat(user_proxy, message="hello")
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_autogen_user_proxy_initiate_chat_detected(self):
+        code = textwrap.dedent("""\
+            def start():
+                user_proxy.initiate_chat(assistant, message="start task")
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_compiled_graph_invoke_detected(self):
+        """graph.compile().invoke(state) — standard LangGraph production pattern."""
+        code = textwrap.dedent("""\
+            def run():
+                result = graph.compile().invoke(state)
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_app_invoke_detected(self):
+        """app.invoke(state) — compiled graph stored in variable named 'app'."""
+        code = textwrap.dedent("""\
+            def run():
+                app = graph.compile()
+                result = app.invoke(state)
+        """)
+        tools = _scan_code(code)
+        assert len(tools) == 1
+        assert tools[0].side_effects[0].category == "agent_invocation"
+
+    def test_flask_app_run_not_agent_invocation(self):
+        """app.run() on Flask must NOT be detected as agent_invocation."""
+        code = textwrap.dedent("""\
+            def start_server():
+                app.run(host='0.0.0.0', port=8080)
+        """)
+        tools = _scan_code(code)
+        agent_inv = [t for t in tools if any(se.category == "agent_invocation" for se in t.side_effects)]
+        assert len(agent_inv) == 0, "Flask app.run() must not be flagged as agent_invocation"
+
     def test_subprocess_run_not_agent(self):
         """subprocess.run() must NOT trigger agent_invocation (already destructive)."""
         tools = _scan_code("""

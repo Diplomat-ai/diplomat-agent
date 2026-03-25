@@ -57,9 +57,13 @@ def _plain_tool_block(tool: Tool) -> str:
         # Show expected guard check lines per category
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
         guard_types_present = {g.type: g for g in tool.guards}
+        seen_labels: set[tuple[str, str]] = set()
         for cat in categories:
             expected = _CATEGORY_EXPECTED_GUARDS.get(cat, [(_category_label(cat), "")])
             for label, guard_type in expected:
+                if (label, guard_type) in seen_labels:
+                    continue
+                seen_labels.add((label, guard_type))
                 guard = guard_types_present.get(guard_type)
                 if guard:
                     gv = f"{guard.type.replace('_', ' ').title()} ({guard.coverage.upper()})"
@@ -276,9 +280,13 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
     else:
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
         guard_types_present = {g.type: g for g in tool.guards}
+        seen_labels: set[tuple[str, str]] = set()
         for cat in categories:
             expected = _CATEGORY_EXPECTED_GUARDS.get(cat, [(_category_label(cat), "")])
             for label, guard_type in expected:
+                if (label, guard_type) in seen_labels:
+                    continue
+                seen_labels.add((label, guard_type))
                 guard = guard_types_present.get(guard_type)
                 if guard:
                     gv = f"{guard.type.replace('_', ' ').title()} ({guard.coverage.upper()})"

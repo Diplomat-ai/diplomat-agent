@@ -595,6 +595,48 @@ class TestNewExclusions:
         names = {t.name for t in tools}
         assert "sample_charge" not in names
 
+    def test_excludes_evaluation_dir(self, tmp_path):
+        eval_dir = tmp_path / "evaluation"
+        eval_dir.mkdir()
+        (eval_dir / "bench.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
+    def test_excludes_evaluations_dir(self, tmp_path):
+        eval_dir = tmp_path / "evaluations"
+        eval_dir.mkdir()
+        (eval_dir / "bench.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
+    def test_excludes_samples_dir(self, tmp_path):
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
+    def test_excludes_playground_dir(self, tmp_path):
+        pg_dir = tmp_path / "playground"
+        pg_dir.mkdir()
+        (pg_dir / "try.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
+    def test_excludes_notebooks_dir(self, tmp_path):
+        nb_dir = tmp_path / "notebooks"
+        nb_dir.mkdir()
+        (nb_dir / "analysis.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
+    def test_excludes_tutorial_dir(self, tmp_path):
+        tut_dir = tmp_path / "tutorial"
+        tut_dir.mkdir()
+        (tut_dir / "step1.py").write_text("def run():\n    session.commit()")
+        tools = scan_directory(tmp_path)
+        assert "run" not in [t.name for t in tools]
+
     def test_does_not_exclude_tools_dir(self, tmp_path):
         """Files in tools/ MUST be scanned (production code)."""
         tools_dir = tmp_path / "tools"
@@ -684,3 +726,73 @@ class TestSummaryFileStats:
         from diplomat_agent.scanner.ast_scanner import last_scan_stats
         assert last_scan_stats["files_scanned"] == 1
         assert last_scan_stats["files_skipped"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 11. Real-world patterns coverage (FIX 7)
+# ---------------------------------------------------------------------------
+
+
+class TestRealWorldPatterns:
+    """Tests for patterns found in real repos but missing from fixtures."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.tools = scan_file(Path("tests/fixtures/real_world_patterns.py"))
+        cls.by_name = {t.name: t for t in cls.tools}
+
+    # --- publish ---
+    def test_s3_put_object_detected(self):
+        assert "upload_to_s3" in self.by_name
+        assert any(se.category == "publish" for se in self.by_name["upload_to_s3"].side_effects)
+
+    def test_s3_upload_file_detected(self):
+        assert "upload_file_to_s3" in self.by_name
+        assert any(se.category == "publish" for se in self.by_name["upload_file_to_s3"].side_effects)
+
+    def test_gcs_upload_detected(self):
+        assert "upload_blob_to_gcs" in self.by_name
+        assert any(se.category == "publish" for se in self.by_name["upload_blob_to_gcs"].side_effects)
+
+    def test_channel_publish_detected(self):
+        assert "publish_message" in self.by_name
+        assert any(se.category == "publish" for se in self.by_name["publish_message"].side_effects)
+
+    # --- destructive ---
+    def test_subprocess_run_detected(self):
+        assert "run_shell_command" in self.by_name
+        assert any(se.category == "destructive" for se in self.by_name["run_shell_command"].side_effects)
+
+    def test_subprocess_check_call_detected(self):
+        assert "install_package" in self.by_name
+        assert any(se.category == "destructive" for se in self.by_name["install_package"].side_effects)
+
+    def test_os_system_detected(self):
+        assert "execute_system_command" in self.by_name
+        assert any(se.category == "destructive" for se in self.by_name["execute_system_command"].side_effects)
+
+    # --- file_delete ---
+    def test_os_remove_detected(self):
+        assert "remove_temp_file" in self.by_name
+        assert any(se.category == "file_delete" for se in self.by_name["remove_temp_file"].side_effects)
+
+    def test_pathlib_unlink_detected(self):
+        assert "unlink_cache_file" in self.by_name
+        assert any(se.category == "file_delete" for se in self.by_name["unlink_cache_file"].side_effects)
+
+    # --- MongoDB ---
+    def test_mongo_insert_one_detected(self):
+        assert "insert_document" in self.by_name
+        assert any(se.category == "database_write" for se in self.by_name["insert_document"].side_effects)
+
+    def test_mongo_insert_many_detected(self):
+        assert "bulk_insert_documents" in self.by_name
+        assert any(se.category == "database_write" for se in self.by_name["bulk_insert_documents"].side_effects)
+
+    def test_mongo_delete_many_detected(self):
+        assert "delete_old_documents" in self.by_name
+        assert any(se.category == "database_delete" for se in self.by_name["delete_old_documents"].side_effects)
+
+    def test_mongo_update_one_detected(self):
+        assert "update_document_status" in self.by_name
+        assert any(se.category == "database_write" for se in self.by_name["update_document_status"].side_effects)

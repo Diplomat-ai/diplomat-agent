@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from diplomat_agent.models import Guard, Scenario, SideEffect, Tool
 from diplomat_agent.analyzer.guards import apply_verdicts, build_summary, compute_verdict
+from diplomat_agent.analyzer.checks import detect_missing_hints
 from diplomat_agent.analyzer.scenarios import generate_scenarios
 from diplomat_agent.scanner.ast_scanner import scan_directory
 
@@ -207,3 +208,76 @@ class TestRawPythonServicesVerdicts:
     def test_send_email_has_email_side_effect(self):
         categories = {se.category for se in self.tools["send_email"].side_effects}
         assert "email" in categories
+
+
+# ---------------------------------------------------------------------------
+# Contextual hints — no rate limit / no auth check only for relevant categories
+# ---------------------------------------------------------------------------
+
+
+class TestContextualHints:
+    """Hints must be contextual — no rate limit / no auth check only for relevant categories."""
+
+    def _make_tool(self, category: str) -> Tool:
+        return Tool(
+            name="test_func",
+            file="test.py",
+            line=1,
+            params=[],
+            side_effects=[SideEffect(category=category, evidence="x()", line=2, file="test.py", type=category)],
+            guards=[],
+            verdict="UNGUARDED",
+        )
+
+    def test_database_write_no_rate_limit_hint(self):
+        assert "no rate limit" not in detect_missing_hints(self._make_tool("database_write"))
+
+    def test_database_write_no_auth_check_hint(self):
+        assert "no auth check" not in detect_missing_hints(self._make_tool("database_write"))
+
+    def test_file_delete_no_rate_limit_hint(self):
+        assert "no rate limit" not in detect_missing_hints(self._make_tool("file_delete"))
+
+    def test_file_delete_no_auth_check_hint(self):
+        assert "no auth check" not in detect_missing_hints(self._make_tool("file_delete"))
+
+    def test_destructive_no_rate_limit_hint(self):
+        assert "no rate limit" not in detect_missing_hints(self._make_tool("destructive"))
+
+    def test_destructive_no_auth_check_hint(self):
+        assert "no auth check" not in detect_missing_hints(self._make_tool("destructive"))
+
+    def test_http_write_gets_rate_limit_hint(self):
+        assert "no rate limit" in detect_missing_hints(self._make_tool("http_write"))
+
+    def test_http_write_gets_auth_check_hint(self):
+        assert "no auth check" in detect_missing_hints(self._make_tool("http_write"))
+
+    def test_email_gets_rate_limit_hint(self):
+        assert "no rate limit" in detect_missing_hints(self._make_tool("email"))
+
+    def test_payment_gets_rate_limit_hint(self):
+        assert "no rate limit" in detect_missing_hints(self._make_tool("payment"))
+
+    def test_payment_gets_auth_check_hint(self):
+        assert "no auth check" in detect_missing_hints(self._make_tool("payment"))
+
+    def test_llm_call_gets_rate_limit_but_not_auth(self):
+        hints = detect_missing_hints(self._make_tool("llm_call"))
+        assert "no rate limit" in hints
+        assert "no auth check" not in hints
+
+    def test_agent_invocation_gets_rate_limit_but_not_auth(self):
+        hints = detect_missing_hints(self._make_tool("agent_invocation"))
+        assert "no rate limit" in hints
+        assert "no auth check" not in hints
+
+    def test_database_delete_gets_auth_but_not_rate_limit(self):
+        hints = detect_missing_hints(self._make_tool("database_delete"))
+        assert "no rate limit" not in hints
+        assert "no auth check" in hints
+
+    def test_publish_gets_auth_but_not_rate_limit(self):
+        hints = detect_missing_hints(self._make_tool("publish"))
+        assert "no rate limit" not in hints
+        assert "no auth check" in hints

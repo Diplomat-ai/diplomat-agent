@@ -69,12 +69,14 @@ def detect_missing_hints(tool: Tool) -> list[str]:
         if "idempotency_key" not in guard_types:
             hints.append("no idempotency mechanism found")
 
-    # 5. No rate limit
-    if "rate_limit" not in guard_types:
+    # 5. No rate limit — only for categories exposed to external loops / quota exhaustion
+    _RATE_LIMIT_CATEGORIES = {"http_write", "email", "llm_call", "payment", "agent_invocation"}
+    if "rate_limit" not in guard_types and categories & _RATE_LIMIT_CATEGORIES:
         hints.append("no rate limit")
 
-    # 6. No auth check
-    if "auth_check" not in guard_types:
+    # 6. No auth check — only for categories that expose sensitive mutations
+    _AUTH_CHECK_CATEGORIES = {"payment", "database_delete", "email", "publish", "http_write"}
+    if "auth_check" not in guard_types and categories & _AUTH_CHECK_CATEGORIES:
         hints.append("no auth check")
 
     return hints[:3]

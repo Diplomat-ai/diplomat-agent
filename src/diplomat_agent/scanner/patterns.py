@@ -411,7 +411,8 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "category": "agent_invocation",
         "risk": 2,
         "match": {
-            "obj_contains": ["graph", "chain", "pipeline", "agent", "workflow", "runnable"],
+            "obj_contains": ["graph", "chain", "pipeline", "agent", "workflow", "runnable",
+                              "compile", "app"],
             "attr_exact": ["invoke", "ainvoke"],
         },
     },
@@ -441,6 +442,25 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "match": {
             "obj_contains": ["runner"],
             "attr_exact": ["run_sync", "run"],
+        },
+    },
+    {
+        # CrewAI: crew.kickoff(), crew.kickoff_async(), crew.kickoff_for_each()
+        "category": "agent_invocation",
+        "risk": 2,
+        "match": {
+            "obj_contains": ["crew"],
+            "attr_exact": ["kickoff", "kickoff_async", "kickoff_for_each"],
+        },
+    },
+    {
+        # AutoGen / AG2: assistant.initiate_chat(), user_proxy.initiate_chat()
+        # No obj_contains: object name varies (assistant, user_proxy, manager, etc.)
+        # initiate_chat is specific enough to avoid false positives
+        "category": "agent_invocation",
+        "risk": 2,
+        "match": {
+            "attr_exact": ["initiate_chat"],
         },
     },
 
@@ -668,7 +688,10 @@ EXCLUDED_DIRS: frozenset[str] = frozenset({
     "dist", "build", "site-packages", ".pytest_cache",
     "tests", "test", "testing", "fixtures",
     "examples", "example", "benchmarks", "benchmark",
-    "evals", "eval", "demos", "demo",
+    "evals", "eval", "evaluation", "evaluations",
+    "demos", "demo", "samples", "sample",
+    "playground", "notebooks", "notebook",
+    "tutorials", "tutorial",
     "docs", "doc", "scripts",
 })
 

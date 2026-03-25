@@ -158,3 +158,56 @@ class TestFullPipelineReport:
         result = _make_result_from_dir(FIXTURES / "raw_python_agent")
         output = render_plain(result, "./raw/")
         assert "bulk_delete" in output
+
+
+# ---------------------------------------------------------------------------
+# Guard label deduplication
+# ---------------------------------------------------------------------------
+
+
+class TestGuardLabelDedup:
+    """Rate limit: NONE must not appear twice when http_write + database_write coexist."""
+
+    def test_rate_limit_not_duplicated(self):
+        tool = Tool(
+            name="research_and_save",
+            file="test.py",
+            line=1,
+            params=[],
+            side_effects=[
+                SideEffect(category="http_write", evidence="requests.post(...)", line=2, file="test.py", type="http_write"),
+                SideEffect(category="database_write", evidence="conn.commit()", line=3, file="test.py", type="database_write"),
+            ],
+            guards=[],
+            verdict="UNGUARDED",
+        )
+        result = ScanResult(
+            tools=[tool],
+            scenarios=[],
+            summary={"total_tools": 1, "unguarded": 1, "partially_guarded": 0, "guarded": 0, "low_risk": 0},
+        )
+        output = render_plain(result, "/tmp/test")
+        count = output.count("Rate limit:")
+        assert count == 1, f"Expected 'Rate limit:' once, found {count} times"
+
+    def test_confirmation_not_duplicated(self):
+        tool = Tool(
+            name="cleanup",
+            file="test.py",
+            line=1,
+            params=[],
+            side_effects=[
+                SideEffect(category="file_delete", evidence="os.remove(f)", line=2, file="test.py", type="file_delete"),
+                SideEffect(category="destructive", evidence="subprocess.run(cmd)", line=3, file="test.py", type="destructive"),
+            ],
+            guards=[],
+            verdict="UNGUARDED",
+        )
+        result = ScanResult(
+            tools=[tool],
+            scenarios=[],
+            summary={"total_tools": 1, "unguarded": 1, "partially_guarded": 0, "guarded": 0, "low_risk": 0},
+        )
+        output = render_plain(result, "/tmp/test")
+        count = output.count("Confirmation step:")
+        assert count == 1, f"Expected 'Confirmation step:' once, found {count} times"
