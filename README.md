@@ -1,27 +1,13 @@
 # diplomat-agent
 
-> v0.2.0 — 264 tests, 48+ detection patterns, 11 effect categories
+[![PyPI version](https://img.shields.io/pypi/v/diplomat-agent)](https://pypi.org/project/diplomat-agent/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
+[![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
 
-Find every tool call in your AI agent that can change the real world.
+> **76% of tool calls in production AI agents have zero safeguards.** Find yours in 60 seconds.
 
-`diplomat-agent` is a static scanner for Python AI agents. It maps every function that writes to a database, calls an external API, sends an email, invokes another agent, or deletes data — and tells you which ones have no checks.
-
-## What it finds
-
-We scanned 16 open-source agent repos. Here's what we found:
-
-| | Unguarded |
-|---|---|
-| Database writes | 3,260 |
-| Database deletes | 1,305 |
-| HTTP writes (POST/PUT/PATCH) | 968 |
-| Subprocess / exec / eval | 697 |
-| LLM calls | 464 |
-| Emails | 250 |
-
-**76% of tool calls had zero checks.**
-
-One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation.
+diplomat-agent scans your Python AI agent and reports every function that can change state in the real world — database writes, API calls, emails, payments, file deletions — and tells you which ones have no checks. Two commands. Immediate results.
 
 ## Quick start
 
@@ -61,27 +47,38 @@ RESULT: 8 with no checks · 3 partial · 1 confirmed (12 total)
   CI enforcement   → --fail-on-unchecked blocks PRs with new unreviewed tool calls
 ```
 
-## What counts as a tool call
+## What we found scanning 16 open-source agent repos
 
-Any function that can change state outside the process:
+| | Unguarded |
+|---|---|
+| Database writes | 3,260 |
+| Database deletes | 1,305 |
+| HTTP writes (POST/PUT/PATCH) | 968 |
+| Subprocess / exec / eval | 697 |
+| LLM calls | 464 |
+| Emails | 250 |
 
-- **Database writes** — `session.commit()`, `.save()`, `.create()`, `.update()`
-- **Database deletes** — `session.delete()`, `.remove()`, `DELETE FROM`
-- **HTTP writes** — `requests.post()`, `httpx.put()`, `client.patch()`
-- **LLM calls** — `openai.chat.completions.create()`, `anthropic.messages.create()`
-- **Agent invocations** — `graph.ainvoke()`, `agent.execute()`, `Runner.run_sync()`
-- **Email** — `smtp.sendmail()`, `ses_client.send_email()`
-- **Destructive** — `subprocess.run()`, `exec()`, `eval()`
-- **Publish** — `s3.put_object()`, `client.publish()`
+**76% of tool calls had zero checks.**
 
-## What counts as a check
+One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation.
 
-- **Input validation** — `Field(le=10000)`, `@validator`, `if ... raise`
-- **Rate limit** — `@rate_limit`, `@throttle`
-- **Auth** — `Depends()`, `Security()` (FastAPI)
-- **Confirmation** — `confirm`, `approve`, `review` in function body
-- **Idempotency** — `idempotency_key`, `get_or_create`, `ON CONFLICT`
-- **Retry bound** — `max_retries=`, `@retry(stop=stop_after_attempt())`
+Full breakdown by repo → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
+
+## toolcalls.yaml — the SBOM for your AI agent
+
+Generate a complete registry of every tool call in your codebase:
+
+```bash
+diplomat-agent . --format registry --output-registry toolcalls.yaml
+```
+
+Think of `toolcalls.yaml` like `requirements.txt` — but for what your agent can *do*, not what it depends on. Commit it to your repo. Diff it in PRs. When your agent gains the ability to write to a new system, the change shows up in the review.
+
+Add this badge to your README to show your repo has been scanned:
+
+```markdown
+[![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
+```
 
 ## CI integration
 
@@ -98,13 +95,33 @@ Add to your CI pipeline:
 
 If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings block the build.
 
-### Generate the registry
+<details>
+<summary><strong>What counts as a tool call</strong> (40+ patterns detected)</summary>
 
-```bash
-diplomat-agent . --format registry --output-registry toolcalls.yaml
-```
+Any function that can change state outside the process:
 
-Commit `toolcalls.yaml` to your repo. Review changes in PRs. The file is a mirror of what your agent can do — it updates on every scan.
+- **Database writes** — `session.commit()`, `.save()`, `.create()`, `.update()`
+- **Database deletes** — `session.delete()`, `.remove()`, `DELETE FROM`
+- **HTTP writes** — `requests.post()`, `httpx.put()`, `client.patch()`
+- **LLM calls** — `openai.chat.completions.create()`, `anthropic.messages.create()`
+- **Agent invocations** — `graph.ainvoke()`, `agent.execute()`, `Runner.run_sync()`
+- **Email** — `smtp.sendmail()`, `ses_client.send_email()`
+- **Destructive** — `subprocess.run()`, `exec()`, `eval()`
+- **Publish** — `s3.put_object()`, `client.publish()`
+
+</details>
+
+<details>
+<summary><strong>What counts as a check</strong> (validation, rate limiting, auth, approval...)</summary>
+
+- **Input validation** — `Field(le=10000)`, `@validator`, `if ... raise`
+- **Rate limit** — `@rate_limit`, `@throttle`
+- **Auth** — `Depends()`, `Security()` (FastAPI)
+- **Confirmation** — `confirm`, `approve`, `review` in function body
+- **Idempotency** — `idempotency_key`, `get_or_create`, `ON CONFLICT`
+- **Retry bound** — `max_retries=`, `@retry(stop=stop_after_attempt())`
+
+</details>
 
 ## Acknowledge a tool call
 
@@ -119,20 +136,14 @@ def send_alert(message):  # checked:ok — protected by API gateway
 
 ## Frameworks tested
 
-| Framework | Coverage |
-|---|---|
-| LangGraph | `graph.ainvoke()`, StateGraph patterns |
-| CrewAI | `agent.execute()`, tool patterns |
-| OpenAI SDK | `client.chat.completions.create()` |
-| OpenAI Agents SDK | `Runner.run_sync()` |
-| LangChain | `chain.invoke()`, AgentExecutor |
-| Direct API calls | OpenAI, Anthropic, any HTTP client |
-
-## Requirements
-
-- Python 3.10+
-- Zero dependencies (stdlib `ast` module only)
-- Optional: `rich` for colored terminal output, `pyyaml` for registry
+| Framework | Coverage | Unguarded % (benchmarks) |
+|---|---|---|
+| LangGraph | StateGraph, tool nodes, conditional edges | 76% (Skyvern) |
+| CrewAI | @tool decorator, agent.execute() | 78% |
+| OpenAI SDK | client.chat.completions.create(), function_call | — |
+| OpenAI Agents SDK | @function_tool, Runner patterns | — |
+| LangChain | @tool, BaseTool, AgentExecutor | — |
+| Direct API calls | requests, httpx, aiohttp, urllib | 75% (Dify) |
 
 ## Benchmarks
 
@@ -142,6 +153,18 @@ def send_alert(message):  # checked:ok — protected by API gateway
 | Dify (1000+ files) | 1,009 | 759 (75%) | ~3s |
 | PraisonAI | 1,028 | 911 (89%) | ~2s |
 | CrewAI | 348 | 273 (78%) | ~1s |
+
+## From scanner to runtime
+
+diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production.
+
+diplomat-agent is static analysis — it tells you which tool calls have no checks, right now, in your codebase.
+
+[Diplomat](https://diplomat.run) is the runtime control plane — it intercepts every tool call *before execution*, evaluates it against your policies in under 50ms, and generates an immutable hash-chained receipt for every decision. Continue, review, or stop — with cryptographic proof.
+
+The difference between knowing your agents are exposed and ensuring they can't act without authorization.
+
+**[→ See Diplomat in action](https://diplomat.run)** · **[→ Book a discovery call](https://calendly.com/josselin-guarnelli)**
 
 ## Known limitations
 
@@ -156,6 +179,12 @@ def send_alert(message):  # checked:ok — protected by API gateway
 - [ ] MCP server scanning
 - [ ] PR comment integration
 - [ ] Runtime enforcement (Diplomat runtime)
+
+## Requirements
+
+- Python 3.10+
+- Zero dependencies (stdlib `ast` module only)
+- Optional: `rich` for colored terminal output, `pyyaml` for registry
 
 ## License
 
