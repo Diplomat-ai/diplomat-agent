@@ -188,4 +188,4 @@ The difference between knowing your agents are exposed and ensuring they can't a
 
 ## License
 
-Apache 2.0 — Copyright 2026 Diplomat Services SAS
+Apache 2.0 
