@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
 
-> **76% of tool calls in production AI agents have zero safeguards.** Find yours in 60 seconds.
+> **76% of tool calls in open-source AI agent codebases have zero safeguards at the source.** Find yours in 60 seconds.
 
 diplomat-agent scans your Python AI agent and reports every function that can change state in the real world — database writes, API calls, emails, payments, file deletions — and tells you which ones have no checks. Two commands. Immediate results.
 
@@ -47,9 +47,11 @@ RESULT: 8 with no checks · 3 partial · 1 confirmed (12 total)
   CI enforcement   → --fail-on-unchecked blocks PRs with new unreviewed tool calls
 ```
 
-## What we found scanning 16 open-source agent repos
+## What we found scanning 16 open-source agent codebases
 
-| | Unguarded |
+We ran diplomat-agent on 16 popular open-source AI agent projects — frameworks, toolkits, and reference applications that teams fork and deploy.
+
+| Category | Unguarded instances |
 |---|---|
 | Database writes | 3,260 |
 | Database deletes | 1,305 |
@@ -58,11 +60,15 @@ RESULT: 8 with no checks · 3 partial · 1 confirmed (12 total)
 | LLM calls | 464 |
 | Emails | 250 |
 
-**76% of tool calls had zero checks.**
+**76% of tool calls had zero checks at the source.**
 
-One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation.
+These are the codebases that teams clone, adapt, and ship. The guardrails aren't missing by accident — they're expected to be added by each team, manually, with no standard and no verification that it happened.
 
-Full breakdown by repo → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
+diplomat-agent answers a question nobody could answer before: **did your team actually add the checks?**
+
+One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation. Not a bug in the framework. Just a tool call that exists without a guard — like thousands of others across these codebases.
+
+Full breakdown by repo, including what we got wrong and what the scanner can't see → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
 ## toolcalls.yaml — the SBOM for your AI agent
 
@@ -153,6 +159,8 @@ def send_alert(message):  # checked:ok — protected by API gateway
 | Dify (1000+ files) | 1,009 | 759 (75%) | ~3s |
 | PraisonAI | 1,028 | 911 (89%) | ~2s |
 | CrewAI | 348 | 273 (78%) | ~1s |
+
+These are open-source codebases, not production deployments. The numbers reflect what's in the source — not what teams may have added in their private forks. Full methodology, known false positives, and blind spots → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
 ## From scanner to runtime
 
