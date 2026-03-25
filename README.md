@@ -1,5 +1,7 @@
 # diplomat-agent
 
+> v0.2.0 — 264 tests, 48+ detection patterns, 11 effect categories
+
 Find every tool call in your AI agent that can change the real world.
 
 `diplomat-agent` is a static scanner for Python AI agents. It maps every function that writes to a database, calls an external API, sends an email, invokes another agent, or deletes data — and tells you which ones have no checks.

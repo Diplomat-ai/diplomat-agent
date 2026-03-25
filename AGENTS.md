@@ -1,4 +1,4 @@
-# AGENTS.md — for AI coding assistants
+# AGENTS.md — for AI coding assistants (v0.2.0)
 
 ## What this repo is
 

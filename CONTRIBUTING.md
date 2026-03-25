@@ -1,4 +1,4 @@
-# Contributing to diplomat-agent
+# Contributing to diplomat-agent (v0.2.0)
 
 ## Quick start
 

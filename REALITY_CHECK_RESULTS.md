@@ -1,4 +1,4 @@
-# Reality Check — diplomat-agent scanner
+# Reality Check — diplomat-agent scanner (v0.2.0)
 
 Generated: 2026-03-24
 Scanner version: from `~/dev/diplomat-agent/src`

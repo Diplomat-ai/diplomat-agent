@@ -1,4 +1,4 @@
-name: CI
+name: CI  # diplomat-agent v0.2.0
 on:
   push:
     branches: [main]

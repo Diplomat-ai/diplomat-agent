@@ -1,4 +1,4 @@
-# Security Policy
+# Security Policy (v0.2.0)
 
 ## Reporting a vulnerability
 

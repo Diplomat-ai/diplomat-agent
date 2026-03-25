@@ -1,4 +1,4 @@
-# diplomat-agent — Repo Structure
+# diplomat-agent — Repo Structure (v0.2.0)
 
 Proposed final structure with justification for each choice. Justifications reference patterns observed in the benchmark repos (openai-agents-python, LangGraph, CrewAI, agentic-radar, Invariant).
 
