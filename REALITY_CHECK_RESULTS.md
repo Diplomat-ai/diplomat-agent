@@ -1,7 +1,7 @@
-# Reality Check — agent-canary scanner
+# Reality Check — diplomat-agent scanner
 
 Generated: 2026-03-24
-Scanner version: from `~/dev/agent-canary/src`
+Scanner version: from `~/dev/diplomat-agent/src`
 Repos scanned: 16 (from pre-existing JSON results in `/tmp/bench/`)
 Note: `results-aihawk.json` and `results-langchain-community.json` were empty (scanner error, path not found at scan time) and are excluded from all counts.
 
@@ -127,7 +127,7 @@ Note: `results-aihawk.json` and `results-langchain-community.json` were empty (s
 
 Commande exécutée :
 ```
-PYTHONPATH=~/dev/agent-canary/src python3 -m agent_canary /tmp/sample_agent_dir
+PYTHONPATH=~/dev/diplomat-agent/src python3 -m diplomat_agent /tmp/sample_agent_dir
 ```
 
 Fichier scanné : `/tmp/sample_agent_dir/sample_agent.py` (agent LangGraph typique sans guards, avec `openai`, `requests`, `sqlite3`).
@@ -135,7 +135,7 @@ Fichier scanné : `/tmp/sample_agent_dir/sample_agent.py` (agent LangGraph typiq
 Output terminal exact :
 
 ```
-🐤 agent-canary — governance scan
+diplomat-agent — governance scan
 
 Scanned: /private/tmp/sample_agent_dir
 Tools with side effects: 1
@@ -201,7 +201,7 @@ RESULT: 1 with no checks · 0 with partial checks · 0 guarded (1 total)
 
 ## 6. Couverture par framework
 
-Chaque test : mini-fichier Python scanné avec agent-canary.
+Chaque test : mini-fichier Python scanné avec diplomat-agent.
 
 | Framework | Effets détectés | Effets manqués | Verdict |
 |-----------|----------------|----------------|---------|

@@ -1,10 +1,10 @@
-# Contributing to agent-canary
+# Contributing to diplomat-agent
 
 ## Quick start
 
 ```bash
-git clone https://github.com/Diplomat-agents/agent-canary.git
-cd agent-canary
+git clone https://github.com/Diplomat-ai/diplomat-agent.git
+cd diplomat-agent
 pip install -e ".[dev]"
 python -m pytest tests/
 ```
@@ -17,11 +17,11 @@ The most valuable contribution. Open an issue using the "False positive" templat
 
 ### Report a missing tool call
 
-If agent-canary misses a function that changes the real world, open an issue with the "Missing detection" template.
+If diplomat-agent misses a function that changes the real world, open an issue with the "Missing detection" template.
 
 ### Add a pattern
 
-Patterns are in `src/agent_canary/scanner/patterns.py`. Each pattern needs a test fixture in `tests/fixtures/` and a test in `tests/`.
+Patterns are in `src/diplomat_agent/scanner/patterns.py`. Each pattern needs a test fixture in `tests/fixtures/` and a test in `tests/`.
 
 ## Code style
 

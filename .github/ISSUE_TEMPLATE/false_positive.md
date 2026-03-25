@@ -10,7 +10,7 @@ labels: false-positive
 **File**:
 **Line**:
 
-## What agent-canary detected
+## What diplomat-agent detected
 
 (paste the terminal output for this function)
 

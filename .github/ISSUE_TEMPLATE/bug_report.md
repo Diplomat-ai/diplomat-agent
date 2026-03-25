@@ -9,13 +9,13 @@ labels: bug
 ## To reproduce
 
 ```bash
-agent-canary [command you ran]
+diplomat-agent [command you ran]
 ```
 
 ## Expected behavior
 
 ## Environment
 
-* agent-canary version:
+* diplomat-agent version:
 * Python version:
 * OS:

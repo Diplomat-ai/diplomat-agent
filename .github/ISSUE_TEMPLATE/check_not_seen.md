@@ -1,6 +1,6 @@
 ---
 name: Check not recognized
-about: A protection exists but agent-canary doesn't see it
+about: A protection exists but diplomat-agent doesn't see it
 labels: check-not-seen
 ---
 
@@ -22,4 +22,4 @@ labels: check-not-seen
 
 ## Notes
 
-If the check is in a different file (middleware, gateway), the correct resolution is `# checked:ok — protected by [where]` in your source code. This issue template is for checks that ARE in the same function scope but agent-canary doesn't detect them.
+If the check is in a different file (middleware, gateway), the correct resolution is `# checked:ok — protected by [where]` in your source code. This issue template is for checks that ARE in the same function scope but diplomat-agent doesn't detect them.

@@ -1,13 +1,13 @@
-# agent-canary — Repo Structure
+# diplomat-agent — Repo Structure
 
 Proposed final structure with justification for each choice. Justifications reference patterns observed in the benchmark repos (openai-agents-python, LangGraph, CrewAI, agentic-radar, Invariant).
 
 ```
-agent-canary/
+diplomat-agent/
 ├── src/
-│   └── agent_canary/              # Underscore, not hyphen — importable Python package
+│   └── diplomat_agent/            # Underscore, not hyphen — importable Python package
 │       ├── __init__.py            # __version__ only
-│       ├── __main__.py            # python -m agent_canary entry point
+│       ├── __main__.py            # python -m diplomat_agent entry point
 │       ├── cli.py                 # argparse CLI — single entry point
 │       ├── models.py              # dataclasses for ToolCall, SideEffect, Guard, Verdict
 │       ├── scanner/
@@ -32,7 +32,7 @@ agent-canary/
 │   │   └── raw_python_agent/      # Fixture: plain Python agent code
 │   └── test_scanner.py            # All tests — single file until >100 tests
 ├── examples/
-│   └── agent-canary.yml           # Example YAML config for dynamic tools
+│   └── diplomat-agent.yml         # Example YAML config for dynamic tools
 ├── docs/
 │   ├── ANALYSIS.md                # Launch analysis (this research)
 │   ├── REPO_STRUCTURE.md          # This file
@@ -50,10 +50,10 @@ agent-canary/
 
 ## Justifications
 
-### `src/agent_canary/` (src layout, underscore package name)
+### `src/diplomat_agent/` (src layout, underscore package name)
 
 **Pattern:** openai-agents-python uses `src/agents/`. LangGraph uses `libs/langgraph/`. agentic-radar uses flat `agentic_radar/`.
-**Decision:** Keep src layout. Rename from `diplomat_canary` to `agent_canary` to match the published package name. The src layout prevents accidental imports from the project root (a real issue in pytest — observed in agentic-radar's flat layout where test imports can shadow the installed package).
+**Decision:** Keep src layout. Use `diplomat_agent` to match the published CLI and the current package name. The src layout prevents accidental imports from the project root (a real issue in pytest — observed in agentic-radar's flat layout where test imports can shadow the installed package).
 
 ### `scanner/`, `analyzer/`, `reporter/` subpackages
 
@@ -70,7 +70,7 @@ agent-canary/
 **Pattern:** openai-agents-python uses `docs/` for Sphinx/MkDocs. LangGraph uses `docs/` for tutorials. agentic-radar has no docs/ (README only).
 **Decision:** Add `docs/` for launch-specific documents (ANALYSIS.md, LAUNCH.md). NOT for auto-generated API docs — the project is too small for that. If/when docs grow, use MkDocs (the LangGraph/CrewAI pattern).
 
-### `examples/agent-canary.yml`
+### `examples/diplomat-agent.yml`
 
 **Pattern:** openai-agents-python has `examples/` with runnable scripts. CrewAI has `examples/` with full project templates.
 **Decision:** Keep minimal. One example config file. No runnable example scripts — the README quickstart IS the example. Adding example scripts would duplicate the README and create maintenance burden.
@@ -78,7 +78,7 @@ agent-canary/
 ### `.github/workflows/ci.yml`
 
 **Pattern:** All 5 benchmarked repos have CI. None show a CI badge in README.
-**Decision:** Keep CI. Consider adding a badge — agent-canary should model the CI-first practice it advocates. Low priority for launch.
+**Decision:** Keep CI. Consider adding a badge — diplomat-agent should model the CI-first practice it advocates. Low priority for launch.
 
 ### Files at root: `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`
 
@@ -89,7 +89,7 @@ agent-canary/
 
 | Current | Proposed | Why change |
 |---------|----------|-----------|
-| `src/diplomat_canary/` | `src/agent_canary/` | Package name must match `pip install agent-canary`. The current name references the parent company, not the product. |
+| Legacy package naming | `src/diplomat_agent/` | Package naming should match the current published product and import path. |
 | No `docs/` | `docs/` | Launch documents need a home. Keeps root clean. |
 | No `reporter/registry.py` | Add `reporter/registry.py` | toolcalls.yaml generation is distinct from terminal/markdown/json output. Separate module. |
 | Benchmark JSONs at root (`skyvern_report.json`, etc.) | Move to `data/benchmarks/` or remove from repo | 700KB JSON files at root clutter the repo. Either move to `data/benchmarks/` (if kept for reproducibility) or add to `.gitignore` (if generated). |

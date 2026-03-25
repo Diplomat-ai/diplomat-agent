@@ -21,9 +21,9 @@ We analyzed GitHub issues from 6 major agentic AI repositories:
 
 - **failure_pattern**: what went wrong (e.g. `tool_called_multiple`, `no_guard_before_call`, `cost_explosion`)
 - **effect_type**: what real-world action was involved (e.g. `database_write`, `payment`, `email_send`)
-- **signal_score**: 1-3 relevance score for agent-canary's detection scope
+- **signal_score**: 1-3 relevance score for diplomat-agent's detection scope
 
-737 issues identified as directly validating agent-canary's core use case (missing guards, uncontrolled retries, cost explosions).
+737 issues identified as directly validating diplomat-agent's core use case (missing guards, uncontrolled retries, cost explosions).
 
 ## Top patterns
 

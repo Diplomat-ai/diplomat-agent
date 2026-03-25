@@ -1,4 +1,4 @@
-# agent-canary — Launch Analysis
+# diplomat-agent — Launch Analysis
 
 Data sources: 2,332 classified issues across 6 repos (LangGraph, CrewAI, AutoGen, OpenAI Agents SDK, Claude Code, Vercel AI SDK). 3 real-world scans (Skyvern: 382 tool calls, SurfSense: 319 tool calls, FinRobot: 27 tool calls). 5 competitor/ecosystem repo benchmarks.
 
@@ -29,7 +29,7 @@ Data sources: 2,332 classified issues across 6 repos (LangGraph, CrewAI, AutoGen
 
 ## Top 10 Pains (ranked by frequency x impact)
 
-| # | Pain | Frequency (issues) | Bloquant? | Example verbatim | Covered by agent-canary? |
+| # | Pain | Frequency (issues) | Bloquant? | Example verbatim | Covered by diplomat-agent? |
 |---|------|-------------------|------------|------------------|--------------------------|
 | 1 | Tool executes multiple times when it should execute once | 1,075 (25.0%) | Yes — duplicate payments, duplicate DB writes | "custom BaseTool wrapper gets called without args and enters infinite tool-use loop" (CrewAI #4495) | **Yes** — flags missing idempotency keys, rate limits |
 | 2 | No check before destructive tool call | 70 direct + implicit in 511 race_condition | Yes — unprotected writes, deletes | "SyncPregelLoop.put_writes caches ERROR/INTERRUPT writes (async has guard, sync does not)" (LangGraph) | **Yes** — core detection: finds tool calls with zero checks |
@@ -49,27 +49,27 @@ Data sources: 2,332 classified issues across 6 repos (LangGraph, CrewAI, AutoGen
 ### 1. No real output in the first 10 lines of README
 
 **Proof:** LangGraph README: no terminal output in first 100 lines. CrewAI README: marketing-focused content about AMP Suite, no runnable example. Only openai-agents-python shows a real code snippet with output.
-**Impact:** Users bounce. Time-to-first-result for LangGraph is ~10 min (requires LangSmith setup). agent-canary must show terminal output before the fold.
+**Impact:** Users bounce. Time-to-first-result for LangGraph is ~10 min (requires LangSmith setup). diplomat-agent must show terminal output before the fold.
 
 ### 2. HTML-only reports (no CLI-native output)
 
 **Proof:** agentic-radar generates an HTML report — requires opening a browser. No terminal output, no CI-friendly format. Invariant requires writing Python policy code before seeing results.
-**Impact:** Doesn't fit in `git diff` review. Not CI-native. agent-canary's terminal + YAML output is the differentiator — preserve it.
+**Impact:** Doesn't fit in `git diff` review. Not CI-native. diplomat-agent's terminal + YAML output is the differentiator — preserve it.
 
 ### 3. Requiring runtime integration for static analysis
 
 **Proof:** Invariant: "Deployed between your application and your MCP servers or LLM provider." Requires code changes and runtime hooks. agentic-radar: static but outputs HTML only.
-**Impact:** Adoption friction. agent-canary runs on source code with zero config. Keep it that way.
+**Impact:** Adoption friction. diplomat-agent runs on source code with zero config. Keep it that way.
 
 ### 4. No versionable artifact
 
 **Proof:** Neither agentic-radar nor Invariant produce a file you commit to git. agentic-radar outputs HTML. Invariant produces runtime logs. Neither creates a reviewable, diffable registry.
-**Impact:** Security reviews can't track progress over time. toolcalls.yaml is agent-canary's moat.
+**Impact:** Security reviews can't track progress over time. toolcalls.yaml is diplomat-agent's moat.
 
 ### 5. Jargon-first positioning ("guardrails", "security posture", "threat model")
 
 **Proof:** Invariant: "contextual guardrails for securing agent systems." agentic-radar: "security scanner for your agentic workflows." The community says "tool calls" (1,075 issues with `tool_called_multiple`) not "guardrails." CrewAI issue titles use "tool call", "tool execution", never "guardrail."
-**Impact:** Devs don't identify. agent-canary should say "tool calls" and "checks" — matches 701 mentions in the issue corpus vs 8 for "scan."
+**Impact:** Devs don't identify. diplomat-agent should say "tool calls" and "checks" — matches 701 mentions in the issue corpus vs 8 for "scan."
 
 ---
 
@@ -85,7 +85,7 @@ No competitor produces a versionable, diffable artifact. agentic-radar outputs H
 
 ### 3. Idempotency detection as killer feature (→ Pain #1)
 
-1,075 issues about tool calls executing multiple times. This is the #1 operational pain. agent-canary already detects missing `get_or_create`, `upsert`, `ON CONFLICT`. No competitor flags this. Lead marketing with this: "Your agent called stripe.Refund.create 4 times. agent-canary would have caught it."
+1,075 issues about tool calls executing multiple times. This is the #1 operational pain. diplomat-agent already detects missing `get_or_create`, `upsert`, `ON CONFLICT`. No competitor flags this. Lead marketing with this: "Your agent called stripe.Refund.create 4 times. diplomat-agent would have caught it."
 
 ### 4. Real-project benchmarks as proof (→ Pain #7)
 
@@ -93,4 +93,4 @@ Skyvern: 307/382 unguarded (80%). SurfSense: 169/319 unguarded (53%). These are 
 
 ### 5. Bridge to runtime with Diplomat (→ Pain #3, #4)
 
-agent-canary is static analysis. Race conditions (#3) and interrupt failures (#4) need runtime. Position agent-canary as the map, Diplomat as the territory control. The toolcalls.yaml becomes the config source for runtime enforcement. This is the business model — give away the scanner, sell the runtime.
+diplomat-agent is static analysis. Race conditions (#3) and interrupt failures (#4) need runtime. Position diplomat-agent as the map, Diplomat as the territory control. The toolcalls.yaml becomes the config source for runtime enforcement. This is the business model — give away the scanner, sell the runtime.

@@ -25,7 +25,7 @@ One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets
 
 ```bash
 pip install diplomat-agent
-diplomat-agent scan .
+diplomat-agent .
 ```
 
 Output:
@@ -89,7 +89,7 @@ Add to your CI pipeline:
 - name: Diplomat governance scan
   run: |
     pip install diplomat-agent
-    diplomat-agent scan . --fail-on-unchecked
+    diplomat-agent . --fail-on-unchecked
 ```
 
 `--fail-on-unchecked` blocks the PR if there are new unreviewed tool calls.
@@ -99,7 +99,7 @@ If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings
 ### Generate the registry
 
 ```bash
-diplomat-agent scan . --format registry --output-registry toolcalls.yaml
+diplomat-agent . --format registry --output-registry toolcalls.yaml
 ```
 
 Commit `toolcalls.yaml` to your repo. Review changes in PRs. The file is a mirror of what your agent can do — it updates on every scan.

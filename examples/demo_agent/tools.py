@@ -1,6 +1,6 @@
-"""Demo agent with tool calls for testing agent-canary.
+"""Demo agent with tool calls for testing diplomat-agent.
 
-Run: agent-canary examples/demo_agent/
+Run: diplomat-agent examples/demo_agent/
 """
 
 from __future__ import annotations

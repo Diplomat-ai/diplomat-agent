@@ -9,7 +9,7 @@ Do not open a public GitHub issue for security vulnerabilities.
 
 ## Scope
 
-agent-canary runs entirely locally. It makes no network calls and collects no telemetry. It only reads Python files — it does not execute them.
+diplomat-agent runs entirely locally. It makes no network calls and collects no telemetry. It only reads Python files — it does not execute them.
 
 Vulnerabilities in scope:
 - Malicious Python files that cause unexpected behavior during AST parsing
@@ -18,5 +18,5 @@ Vulnerabilities in scope:
 
 ## Out of scope
 
-- Vulnerabilities in scanned codebases (agent-canary reports them, it doesn't fix them)
+- Vulnerabilities in scanned codebases (diplomat-agent reports them, it doesn't fix them)
 - Feature requests (use GitHub issues)

@@ -1,18 +1,18 @@
-# agent-canary.yml
+# diplomat-agent.yml
 # ─────────────────────────────────────────────────────────
 # Configuration manuelle pour un scan de gouvernance précis.
 #
 # Quand utiliser ce fichier :
-#   - Le scan auto (agent-canary ./mon_projet/) a raté des tools
+#   - Le scan auto (diplomat-agent ./mon_projet/) a raté des tools
 #   - Vos tools sont générés dynamiquement (MCP, OpenAPI, plugin system)
 #   - Vous voulez déclarer des guards que l'analyse statique ne détecte pas
 #   - Votre codebase n'est pas en Python
 #
 # Pour générer ce fichier automatiquement à partir de votre code :
-#   agent-canary --init ./mon_projet/
+#   diplomat-agent --init ./mon_projet/
 #
 # Puis ajustez et relancez :
-#   agent-canary --config agent-canary.yml
+#   diplomat-agent --config diplomat-agent.yml
 # ─────────────────────────────────────────────────────────
 
 agent:

@@ -2,16 +2,16 @@
 
 ## What this repo is
 
-agent-canary is a static analysis tool that scans Python codebases for tool calls (functions that change the real world: payments, database writes, HTTP calls, emails) and checks whether safety checks exist around them.
+diplomat-agent is a static analysis tool that scans Python codebases for tool calls (functions that change the real world: payments, database writes, HTTP calls, emails) and checks whether safety checks exist around them.
 
 ## Architecture
 
-- `src/agent_canary/scanner/` — AST visitor that detects effects and checks
-- `src/agent_canary/scanner/patterns.py` — catalogue of all known patterns (data, not logic)
-- `src/agent_canary/analyzer/` — computes verdict (UNGUARDED / PARTIALLY_GUARDED / GUARDED / LOW_RISK) and missing check hints
-- `src/agent_canary/reporter/` — terminal, markdown, JSON, YAML registry outputs
-- `src/agent_canary/models.py` — dataclasses: SideEffect, Guard, Tool, Scenario, ScanResult
-- `src/agent_canary/cli.py` — argparse CLI entry point
+- `src/diplomat_agent/scanner/` — AST visitor that detects effects and checks
+- `src/diplomat_agent/scanner/patterns.py` — catalogue of all known patterns (data, not logic)
+- `src/diplomat_agent/analyzer/` — computes verdict (UNGUARDED / PARTIALLY_GUARDED / GUARDED / LOW_RISK) and missing check hints
+- `src/diplomat_agent/reporter/` — terminal, markdown, JSON, YAML registry outputs
+- `src/diplomat_agent/models.py` — dataclasses: SideEffect, Guard, Tool, Scenario, ScanResult
+- `src/diplomat_agent/cli.py` — argparse CLI entry point
 
 ## Key design decisions
 
