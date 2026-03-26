@@ -62,11 +62,15 @@ We ran diplomat-agent on 16 popular open-source AI agent projects — frameworks
 
 **76% of tool calls had zero checks at the source.**
 
+Known false positive rate: ~5% overall, higher on payment-related patterns (~22%). Full transparency on what we got right, what we got wrong, and what we can't see → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
+
 These are the codebases that teams clone, adapt, and ship. The guardrails aren't missing by accident — they're expected to be added by each team, manually, with no standard and no verification that it happened.
 
 diplomat-agent answers a question nobody could answer before: **did your team actually add the checks?**
 
 One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation. Not a bug in the framework. Just a tool call that exists without a guard — like thousands of others across these codebases.
+
+diplomat-agent reduces the attack surface — when prompt injection happens, the unguarded tool calls are the ones that get exploited. Knowing which ones have no checks is the first step.
 
 Full breakdown by repo, including what we got wrong and what the scanner can't see → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
@@ -140,6 +144,8 @@ def send_alert(message):  # checked:ok — protected by API gateway
 
 `# diplomat:ok`, `# checked:ok`, and `# canary:ok` all work.
 
+Every `# checked:ok` annotation appears in `toolcalls.yaml` with its justification. Reviewers can audit acknowledgments in PRs — no tool call disappears silently.
+
 ## Frameworks tested
 
 | Framework | Coverage | Unguarded % (benchmarks) |
@@ -153,12 +159,12 @@ def send_alert(message):  # checked:ok — protected by API gateway
 
 ## Benchmarks
 
-| Repo | Tool calls | Unguarded | Time |
-|---|---|---|---|
-| Skyvern (595 files) | 452 | 345 (76%) | ~2s |
-| Dify (1000+ files) | 1,009 | 759 (75%) | ~3s |
-| PraisonAI | 1,028 | 911 (89%) | ~2s |
-| CrewAI | 348 | 273 (78%) | ~1s |
+| Repo | Type | Tool calls | Unguarded | Time |
+|---|---|---|---|---|
+| Skyvern (595 files) | Application | 452 | 345 (76%) | ~2s |
+| Dify (1000+ files) | Platform | 1,009 | 759 (75%) | ~3s |
+| PraisonAI | Framework | 1,028 | 911 (89%) | ~2s |
+| CrewAI | Framework | 348 | 273 (78%) | ~1s |
 
 These are open-source codebases, not production deployments. The numbers reflect what's in the source — not what teams may have added in their private forks. Full methodology, known false positives, and blind spots → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
@@ -176,10 +182,12 @@ The difference between knowing your agents are exposed and ensuring they can't a
 
 ## Known limitations
 
-- Static analysis only — cannot detect runtime-generated tool calls
-- `name_contains` patterns (e.g. "refund", "charge") may match internal business methods that aren't actual payment operations (~22% FP rate on payment patterns)
-- No inter-procedural analysis (doesn't follow calls across files)
-- No import alias resolution
+- **Static analysis only** — cannot detect runtime-generated tool calls or guards added at infrastructure level (API gateways, IAM, network policies)
+- **Intra-procedural only** — `session.commit()` is flagged when no validation exists in the same function. If validation happens in a calling function, middleware, or ORM model validator, the scanner can't see it. Use `# checked:ok — validated in [where]` to acknowledge
+- **HTTP writes don't distinguish internal vs external** — a POST to an internal health endpoint and a POST to a third-party API look identical in static analysis. Mark internal calls with `# checked:ok — internal service`
+- **`name_contains` patterns** (e.g. "refund", "charge") may match internal business methods that aren't actual payment operations (~22% FP rate on payment patterns)
+- **No import alias resolution** — `import requests as r` then `r.post()` is not detected
+- **Python only** — TypeScript on the roadmap
 
 ## Roadmap
 

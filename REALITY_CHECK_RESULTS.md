@@ -25,6 +25,9 @@ We believe in showing our work. Here's what the scanner doesn't handle well:
 
 **If you find something we missed or got wrong, open an issue.** We'd rather fix it than pretend it's not there.
 
+**On repo types:**
+Not all repos in this benchmark are the same. Some are frameworks (CrewAI, PraisonAI) where the absence of guards is by design — the framework expects the developer to add them. Others are applications (Skyvern, Dify, Khoj, AutoGPT, SurfSense) where the tool calls were written by the teams who built the product. We scan both identically and let you draw your own conclusions from the "Type" column.
+
 ---
 
 ## Summary
@@ -45,26 +48,38 @@ We believe in showing our work. Here's what the scanner doesn't handle well:
 
 These repos range from agent frameworks (CrewAI) to reference applications (Khoj, Dify, Skyvern). The scanner treats them identically — it maps tool calls and checks whether guards exist in the same function.
 
-| Repo | What it is | Files | Tool calls | Unguarded | % | Scan time |
-|------|-----------|-------|------------|-----------|---|-----------|
-| PraisonAI | Multi-agent framework | ~800 | 1,028 | 911 | 89% | ~2s |
-| CrewAI | Agent framework | ~400 | 348 | 273 | 78% | ~1s |
-| Skyvern | Browser automation agent | ~600 | 452 | 345 | 76% | ~2s |
-| AutoGPT | Autonomous agent | ~500 | 464 | 355 | 76% | ~2s |
-| Dify (backend) | LLM app platform | 1000+ | 1,009 | 759 | 75% | ~3s |
-| SurfSense | Search/knowledge agent | ~300 | 315 | 165 | 52% | ~1s |
-| OpenAI Agents | Official SDK examples | ~100 | 93 | 78 | 84% | <1s |
-| MetaGPT | Multi-agent framework | ~400 | 205 | 186 | 91% | ~1s |
-| Browser-use | Web automation agent | ~200 | 267 | 230 | 86% | ~1s |
-| OpenAgents | Research agent platform | ~200 | 178 | 177 | 99% | ~1s |
-| Khoj | Personal AI assistant | ~300 | 181 | 125 | 69% | ~1s |
-| FinRobot | Financial AI agent | ~100 | 69 | 55 | 80% | <1s |
-| Open-SWE | SWE automation agent | ~100 | 35 | 34 | 97% | <1s |
-| GPT-Researcher | Research agent | ~100 | 31 | 27 | 87% | <1s |
-| Composio | Tool integration platform | ~50 | 28 | 26 | 93% | <1s |
-| Stripe Agent Toolkit | Stripe agent benchmark | ~30 | 26 | 14 | 54% | <1s |
+| Repo | Type | Files | Tool calls | Unguarded | % | Scan time |
+|---|---|---|---|---|---|---|
+| PraisonAI | Framework | ~800 | 1,028 | 911 | 89% | ~2s |
+| CrewAI | Framework | ~400 | 348 | 273 | 78% | ~1s |
+| Skyvern | Application | ~600 | 452 | 345 | 76% | ~2s |
+| AutoGPT | Application | ~500 | 464 | 355 | 76% | ~2s |
+| Dify (backend) | Platform | 1000+ | 1,009 | 759 | 75% | ~3s |
+| Khoj | Application | ~300 | 181 | 125 | 69% | ~1s |
+| SurfSense | Application | ~300 | 315 | 165 | 52% | ~1s |
+| OpenAI Agents | SDK examples | ~100 | 93 | 78 | 84% | <1s |
+| MetaGPT | Framework | ~400 | 205 | 186 | 91% | ~1s |
+| Browser-use | Application | ~200 | 267 | 230 | 86% | ~1s |
+| OpenAgents | Application | ~200 | 178 | 177 | 99% | ~1s |
+| FinRobot | Application | ~100 | 69 | 55 | 80% | <1s |
+| Open-SWE | Application | ~100 | 35 | 34 | 97% | <1s |
+| GPT-Researcher | Application | ~100 | 31 | 27 | 87% | <1s |
+| Composio | Platform | ~50 | 28 | 26 | 93% | <1s |
+| Stripe Agent Toolkit | Benchmark | ~30 | 26 | 14 | 54% | <1s |
 
 **Note:** AIHawk and LangChain-community were included in the scan run but produced empty results due to path errors at scan time. They are excluded from all counts.
+
+### By repo type
+
+| Type | Repos | Avg unguarded |
+|---|---|---|
+| Application | 9 | 80% |
+| Framework | 3 | 83% |
+| Platform | 2 | 78% |
+| SDK examples | 1 | 84% |
+| Benchmark | 1 | 54% |
+
+Applications — where teams wrote the tool calls themselves — show the same unguarded rate as frameworks. The gap between "the framework doesn't include guards" and "the team didn't add guards either" is consistent across both categories.
 
 ---
 
@@ -164,6 +179,8 @@ Every number in this document is reproducible. If you get different results, ope
 - **Guard detection:** Checks for input validation (Pydantic, type checks), rate limiting, authentication, approval gates, idempotency keys, retry bounds within the same function.
 - **Verdict logic:** `UNGUARDED` = has side effects + zero guards. `PARTIALLY_GUARDED` = has guards but they don't cover all side effects. `GUARDED` = 2+ distinct guard types covering all effects. `LOW_RISK` = no side effects detected.
 - **Scope:** Intra-procedural only. Each function is analyzed independently.
+
+**On database_write counts:** `session.commit()` is the most common pattern (present in 15/16 repos, estimated 2,000+ of the 3,260 database_write matches). The scanner flags `commit()` as unguarded when no validation exists in the same function. In practice, validation often exists in a service layer, middleware, or ORM model — which the scanner cannot see (intra-procedural only). This means the true unguarded rate for database writes is likely lower than reported. Use `# checked:ok` to acknowledge commit() calls that are protected elsewhere.
 
 ---
 
