@@ -71,15 +71,15 @@ These repos range from agent frameworks (CrewAI) to reference applications (Khoj
 
 ### By repo type
 
-| Type | Repos | Avg unguarded |
-|---|---|---|
-| Application | 9 | 80% |
-| Framework | 3 | 83% |
-| Platform | 2 | 78% |
-| SDK examples | 1 | 84% |
-| Benchmark | 1 | 54% |
+| Type | Repos | Avg unguarded | What this means |
+|---|---|---|---|
+| Framework | 3 | 83% | Expected — frameworks leave guards to the developer |
+| Application | 9 | 80% | These teams built the product. The guards were theirs to add. |
+| Platform | 2 | 78% | Same pattern as applications |
+| SDK examples | 1 | 84% | Reference code that teams copy |
+| Benchmark | 1 | 54% | Test environment, not representative |
 
-Applications — where teams wrote the tool calls themselves — show the same unguarded rate as frameworks. The gap between "the framework doesn't include guards" and "the team didn't add guards either" is consistent across both categories.
+Frameworks at 83% unguarded is by design — that's how frameworks work. The relevant number is **applications at 80%**. These are codebases where teams wrote the tool calls, built the product, and shipped it. The guards were theirs to add at build time. In 4 out of 5 cases, they weren't added.
 
 ---
 
@@ -131,17 +131,15 @@ Calls `tool_workflow_delete(workflow_id=workflow_id, force=force)` with a `force
 
 ## How to read these numbers
 
-**"76% unguarded" doesn't mean "76% of production agents are vulnerable."**
+**"76% unguarded" is not a vulnerability score. It's an inventory.**
 
-It means: 76% of tool calls in these open-source codebases have no detectable safeguards at the source code level. These are the repos that teams clone, extend, and deploy. Whether the teams who deploy them add their own guards is exactly the question diplomat-agent helps answer.
+Each unguarded tool call is a side effect that can reach production if it's not addressed during the build. A `session.delete()` with no confirmation gate. A `requests.post()` with no rate limit. A `subprocess.run()` with no input validation. None of these are bugs today — but each one becomes a risk the moment an agent calls it autonomously in production.
 
-The scanner is static analysis. It sees what's in the code. It doesn't see:
-- Runtime middleware or API gateways that may add auth/rate limiting
-- Infrastructure-level protections (network policies, IAM roles)
-- Deployment configurations that restrict access
-- Guards added by teams in their private forks
+The 76% tells you how much of that surface exists in the codebase before anyone decides what to do about it. Some of these tool calls will be protected by infrastructure (API gateways, IAM, network policies). Some will be protected by code in other layers that the scanner can't see (middleware, service layer validation). And some will reach production with no protection at all.
 
-That's why `# checked:ok — protected by [where]` exists. If a tool call is protected elsewhere, you annotate it and the scanner marks it as acknowledged.
+diplomat-agent doesn't decide which is which. Your team does. The scanner gives you the inventory so you can make that decision deliberately — at design time, not after an incident.
+
+That's what `# checked:ok — protected by [where]` is for. Every tool call gets a verdict: fix it, acknowledge it, or leave it for the next person to discover in production.
 
 ---
 

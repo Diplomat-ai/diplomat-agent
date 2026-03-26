@@ -68,6 +68,8 @@ These are the codebases that teams clone, adapt, and ship. The guardrails aren't
 
 diplomat-agent answers a question nobody could answer before: **did your team actually add the checks?**
 
+Each unguarded tool call is a side effect that can reach production if it's not addressed during the build — a database delete with no confirmation, an HTTP call with no rate limit, a subprocess with no input validation. Not bugs today. Risks tomorrow, when an agent calls them autonomously.
+
 One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation. Not a bug in the framework. Just a tool call that exists without a guard — like thousands of others across these codebases.
 
 diplomat-agent reduces the attack surface — when prompt injection happens, the unguarded tool calls are the ones that get exploited. Knowing which ones have no checks is the first step.
