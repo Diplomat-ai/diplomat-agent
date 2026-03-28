@@ -18,8 +18,6 @@ We believe in showing our work. Here's what the scanner doesn't handle well:
 - `publish` pattern (609 matches) captures MQTT `channel.publish()` and message queue patterns alongside actual content publishing. The word "publish" appears in many non-risky contexts.
 
 **Known blind spots:**
-- OpenAI Agents SDK `Runner.run_sync()` is not detected — `Runner` (capitalized class) doesn't match our object patterns. On the roadmap.
-- CrewAI `crew.kickoff()` is not detected — `kickoff` isn't in our method patterns.
 - No inter-procedural analysis: if function A calls function B which calls `session.delete()`, only B is flagged.
 - No import resolution: if you alias `import requests as r`, the scanner won't catch `r.post()`.
 
@@ -79,14 +77,16 @@ These repos range from agent frameworks (CrewAI) to reference applications (Khoj
 | SDK examples | 1 | 84% | Reference code that teams copy |
 | Benchmark | 1 | 54% | Test environment, not representative |
 
-Frameworks at 83% unguarded is by design — that's how frameworks work. The relevant number is **applications at 80%**. These are codebases where teams wrote the tool calls, built the product, and shipped it. The guards were theirs to add at build time. In 4 out of 5 cases, they weren't added.
+Frameworks at 83% unguarded is by design — that's how frameworks work. The relevant number is applications: **76% unguarded across 1,992 tool calls in 9 repos** (weighted aggregate). The per-repo average is 80%, but small repos like Open-SWE (35 calls, 97%) and OpenAgents (178 calls, 99%) pull that average up. The weighted number is more representative.
 
 ---
 
 ## What the scanner found, by category
 
-| Category | Total unguarded | Present in X/16 repos | What it detects |
-|----------|----------------|----------------------|-----------------|
+**Note on overlap:** A single function with multiple side effects (e.g. a DB write + an HTTP call) appears in multiple rows. Category totals sum to more than the per-repo totals due to this overlap. The per-repo numbers in the table above are deduplicated — use those for aggregate statistics.
+
+| Category | Unguarded instances (with overlap) | Present in X/16 repos | What it detects |
+|----------|-----------------------------------|----------------------|-----------------|
 | Database writes | 3,260 | 15/16 | `session.commit()`, `cursor.execute("INSERT/UPDATE")`, `model.save()`, ORM `.create()` |
 | Database deletes | 1,305 | 14/16 | `session.delete()`, `.remove()`, `.drop()`, `cursor.execute("DELETE")` |
 | HTTP writes | 968 | 14/16 | `requests.post/put/patch()`, `httpx.post()`, `aiohttp` writes |
@@ -161,8 +161,6 @@ Every number in this document is reproducible. If you get different results, ope
 
 | Gap | Impact | Status |
 |-----|--------|--------|
-| OpenAI Agents SDK `Runner.run_sync()` | Misses agent execution in this SDK | Roadmap |
-| CrewAI `crew.kickoff()` | Misses crew launch pattern | Roadmap |
 | Inter-procedural analysis | Can't follow function A → function B → side effect | Known limitation |
 | Import aliases (`import requests as r`) | Misses aliased calls | Known limitation |
 | TypeScript agents | Only Python supported | Roadmap |
