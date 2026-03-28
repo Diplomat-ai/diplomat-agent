@@ -22,24 +22,24 @@ Output:
 diplomat-agent — governance scan
 
 Scanned: ./my-agent
-Tool calls with side effects: 12
+Tools with side effects: 12
 
-⚠ research_and_save(query, db_path)
-  Write protection:       NONE
+⚠ send_report(endpoint, data)
   Rate limit:             NONE
-  → no rate limit · no auth check
+  Retry bound:            NONE
+  → Risk: agent could exhaust external API quota with 200 calls
+  ⤷ no rate limit · no auth check
   Governance: ❌ UNGUARDED
 
-⚠ send_notification(user_id, message)
-  Write protection:       NONE
-  → no confirmation before send
+⚠ delete_user_data(user_id)
+  Batch protection:       NONE
+  Confirmation step:      NONE
+  → Risk: single prompt could trigger mass deletion
+  ⤷ no confirmation step · no auth check
   Governance: ❌ UNGUARDED
-
-✓ process_order(order_id) — # checked:ok — protected by API gateway
-  Governance: ✅ CONFIRMED
 
 ────────────────────────────────────────────
-RESULT: 8 with no checks · 3 partial · 1 confirmed (12 total)
+RESULT: 8 with no checks · 3 with partial checks · 1 guarded (12 total)
 
   Fix              → add validation in code, the next scan picks it up
   Acknowledge      → add  # checked:ok  in your source code
