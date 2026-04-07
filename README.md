@@ -108,12 +108,6 @@ Tested on 16 open-source agent codebases (Skyvern, Dify, CrewAI, Khoj, PraisonAI
 
 Known false positive rate: ~5% overall. Full methodology, per-repo breakdown, and known blind spots -> [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
-## From scanner to runtime
-
-diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production — intercepting every tool call before execution with policy evaluation in <50ms and cryptographic receipts.
-
-**[-> See Diplomat in action](https://diplomat.run)** · **[-> Book a discovery call](https://calendly.com/josselin-guarnelli)**
-
 ## Known limitations
 
 - **Static analysis only** — no runtime or infra-level guards
