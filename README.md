@@ -16,6 +16,8 @@ pip install diplomat-agent
 diplomat-agent .
 ```
 
+Other output formats: `--format markdown`, `--format json`, `--format csaf`, `--format registry`.
+
 Output:
 
 ```
@@ -47,66 +49,6 @@ RESULT: 8 with no checks · 3 with partial checks · 1 guarded (12 total)
   CI enforcement   → --fail-on-unchecked blocks PRs with new unreviewed tool calls
 ```
 
-## What we found scanning 16 open-source agent codebases
-
-We ran diplomat-agent on 16 popular open-source AI agent projects — frameworks, toolkits, and reference applications that teams fork and deploy.
-
-| Category | Unguarded instances |
-|---|---|
-| Database writes | 3,260 |
-| Database deletes | 1,305 |
-| HTTP writes (POST/PUT/PATCH) | 968 |
-| Subprocess / exec / eval | 697 |
-| LLM calls | 464 |
-| Emails | 250 |
-
-**76% of tool calls had zero checks at the source.**
-
-Known false positive rate: ~5% overall, higher on payment-related patterns (~22%). Full transparency on what we got right, what we got wrong, and what we can't see → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
-
-These are the codebases that teams clone, adapt, and ship. The guardrails aren't missing by accident — they're expected to be added by each team, manually, with no standard and no verification that it happened.
-
-diplomat-agent answers a question nobody could answer before: **did your team actually add the checks?**
-
-Each unguarded tool call is a side effect that can reach production if it's not addressed during the build — a database delete with no confirmation, an HTTP call with no rate limit, a subprocess with no input validation. Not bugs today. Risks tomorrow, when an agent calls them autonomously.
-
-One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets an LLM delete user memories with no human confirmation. Not a bug in the framework. Just a tool call that exists without a guard — like thousands of others across these codebases.
-
-diplomat-agent reduces the attack surface — when prompt injection happens, the unguarded tool calls are the ones that get exploited. Knowing which ones have no checks is the first step.
-
-Full breakdown by repo, including what we got wrong and what the scanner can't see → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
-
-## toolcalls.yaml — the SBOM for your AI agent
-
-Generate a complete registry of every tool call in your codebase:
-
-```bash
-diplomat-agent . --format registry --output-registry toolcalls.yaml
-```
-
-Think of `toolcalls.yaml` like `requirements.txt` — but for what your agent can *do*, not what it depends on. Commit it to your repo. Diff it in PRs. When your agent gains the ability to write to a new system, the change shows up in the review.
-
-Add this badge to your README to show your repo has been scanned:
-
-```markdown
-[![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
-```
-
-## CI integration
-
-Add to your CI pipeline:
-
-```yaml
-- name: Diplomat governance scan
-  run: |
-    pip install diplomat-agent
-    diplomat-agent . --fail-on-unchecked
-```
-
-`--fail-on-unchecked` blocks the PR if there are new unreviewed tool calls.
-
-If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings block the build.
-
 <details>
 <summary><strong>What counts as a tool call</strong> (40+ patterns detected)</summary>
 
@@ -135,61 +77,57 @@ Any function that can change state outside the process:
 
 </details>
 
-## Acknowledge a tool call
+## CI integration
 
-If a tool call is intentionally unguarded or protected elsewhere:
+Add to your CI pipeline:
 
-```python
-def send_alert(message):  # checked:ok — protected by API gateway
-    requests.post(ALERT_URL, json={"msg": message})
+```yaml
+- name: Diplomat governance scan
+  run: |
+    pip install diplomat-agent
+    diplomat-agent . --fail-on-unchecked
 ```
 
-`# diplomat:ok`, `# checked:ok`, and `# canary:ok` all work.
+`--fail-on-unchecked` blocks the PR if there are new unreviewed tool calls.
 
-Every `# checked:ok` annotation appears in `toolcalls.yaml` with its justification. Reviewers can audit acknowledgments in PRs — no tool call disappears silently.
+If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings block the build.
 
-## Frameworks tested
+## toolcalls.yaml — the SBOM for your AI agent
 
-| Framework | Coverage | Unguarded % (benchmarks) |
-|---|---|---|
-| LangGraph | StateGraph, tool nodes, conditional edges | 76% (Skyvern) |
-| CrewAI | @tool decorator, agent.execute() | 78% |
-| OpenAI SDK | client.chat.completions.create(), function_call | — |
-| OpenAI Agents SDK | @function_tool, Runner patterns | — |
-| LangChain | @tool, BaseTool, AgentExecutor | — |
-| Direct API calls | requests, httpx, aiohttp, urllib | 75% (Dify) |
+Generate a complete registry of every tool call in your codebase:
+
+```bash
+diplomat-agent . --format registry --output-registry toolcalls.yaml
+```
+
+Think of `toolcalls.yaml` like `requirements.txt` — but for what your agent can *do*, not what it depends on. Commit it to your repo. Diff it in PRs. When your agent gains the ability to write to a new system, the change shows up in the review.
 
 ## Benchmarks
 
-| Repo | Type | Tool calls | Unguarded | Time |
-|---|---|---|---|---|
-| Skyvern (595 files) | Application | 452 | 345 (76%) | ~2s |
-| Dify (1000+ files) | Platform | 1,009 | 759 (75%) | ~3s |
-| PraisonAI | Framework | 1,028 | 911 (89%) | ~2s |
-| CrewAI | Framework | 348 | 273 (78%) | ~1s |
+Tested on 16 open-source agent codebases (Skyvern, Dify, CrewAI, Khoj, PraisonAI...). 76% of tool calls had zero checks at the source. Scan time: 1-3 seconds per codebase.
 
-These are open-source codebases, not production deployments. The numbers reflect what's in the source — not what teams may have added in their private forks. Full methodology, known false positives, and blind spots → [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
+Known false positive rate: ~5% overall. Full methodology, per-repo breakdown, and known blind spots -> [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
 ## From scanner to runtime
 
-diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production.
+diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production — intercepting every tool call before execution with policy evaluation in <50ms and cryptographic receipts.
 
-diplomat-agent is static analysis — it tells you which tool calls have no checks, right now, in your codebase.
-
-[Diplomat](https://diplomat.run) is the runtime control plane — it intercepts every tool call *before execution*, evaluates it against your policies in under 50ms, and generates an immutable hash-chained receipt for every decision. Continue, review, or stop — with cryptographic proof.
-
-The difference between knowing your agents are exposed and ensuring they can't act without authorization.
-
-**[→ See Diplomat in action](https://diplomat.run)** · **[→ Book a discovery call](https://calendly.com/josselin-guarnelli)**
+**[-> See Diplomat in action](https://diplomat.run)** · **[-> Book a discovery call](https://calendly.com/josselin-guarnelli)**
 
 ## Known limitations
 
-- **Static analysis only** — cannot detect runtime-generated tool calls or guards added at infrastructure level (API gateways, IAM, network policies)
-- **Intra-procedural only** — `session.commit()` is flagged when no validation exists in the same function. If validation happens in a calling function, middleware, or ORM model validator, the scanner can't see it. Use `# checked:ok — validated in [where]` to acknowledge
-- **HTTP writes don't distinguish internal vs external** — a POST to an internal health endpoint and a POST to a third-party API look identical in static analysis. Mark internal calls with `# checked:ok — internal service`
-- **`name_contains` patterns** (e.g. "refund", "charge") may match internal business methods that aren't actual payment operations (~22% FP rate on payment patterns)
-- **No import alias resolution** — `import requests as r` then `r.post()` is not detected
+- **Static analysis only** — no runtime or infra-level guards
+- **Intra-procedural only** — use `# checked:ok` for guards in calling code
 - **Python only** — TypeScript on the roadmap
+
+## Learn more
+
+- [CSAF 2.0 advisory generation](docs/csaf.md)
+- [Benchmark results on 16 codebases](docs/benchmarks.md)
+- [Acknowledging tool calls](docs/acknowledge.md)
+- [Supported frameworks](docs/frameworks.md)
+- [Full limitations](docs/limitations.md)
+- [toolcalls.yaml registry](docs/toolcalls.md)
 
 ## Roadmap
 
@@ -206,4 +144,4 @@ The difference between knowing your agents are exposed and ensuring they can't a
 
 ## License
 
-Apache 2.0 
+Apache 2.0

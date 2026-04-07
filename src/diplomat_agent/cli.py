@@ -43,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--format",
-        choices=["terminal", "markdown", "json", "registry"],
+        choices=["terminal", "markdown", "json", "csaf", "registry"],
         default="terminal",
         help="Output format (default: terminal)",
     )
@@ -78,6 +78,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="AMOUNT",
         help="Custom threshold for estimated financial exposure warning",
+    )
+    parser.add_argument(
+        "--max-vulns",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Maximum vulnerabilities in CSAF output (default: 50)",
     )
     parser.add_argument(
         "--no-rich",
@@ -204,6 +211,29 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 sys.stdout.write(content + "\n")
 
+        elif args.format == "csaf":
+            from diplomat_agent.csaf.converter import (
+                generate_advisory_id,
+                scan_to_csaf,
+                write_advisory,
+            )
+            import json as _json
+
+            repo_name = Path(scanned_path).name
+            advisory_id = generate_advisory_id(1)
+            csaf = scan_to_csaf(
+                result,
+                advisory_id,
+                repo_name,
+                max_vulns=args.max_vulns,
+            )
+            content = _json.dumps(csaf, indent=2)
+            if output_file:
+                write_advisory(csaf, str(output_file))
+                print(f"CSAF advisory written to: {output_file}", file=sys.stderr)
+            else:
+                sys.stdout.write(content + "\n")
+
     # --- Load baseline BEFORE generating registry (which overwrites the file) ---
     fail_on = args.fail_on_unchecked or args.fail_on_unguarded
     baseline_entries: list[dict] | None = None
@@ -218,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         from diplomat_agent.reporter.registry import generate
         registry_path = args.output_registry or "toolcalls.yaml"
         generate(result, output_path=registry_path, scanned_path=scanned_path)
-        print(f"\n→ Tool call map written to {registry_path}", file=sys.stderr)
+        print(f"\n\u2192 Tool call map written to {registry_path}", file=sys.stderr)
 
     # --- Exit code for CI: --fail-on-unchecked / --fail-on-unguarded ---
     if fail_on:
@@ -234,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
 
             if new_unchecked:
                 print(
-                    f"\n✗ {len(new_unchecked)} NEW tool calls with no checks "
+                    f"\n\u2717 {len(new_unchecked)} NEW tool calls with no checks "
                     f"(not in baseline {baseline_path})",
                     file=sys.stderr,
                 )
@@ -243,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             else:
                 print(
-                    f"\n✓ No new unchecked tool calls "
+                    f"\n\u2713 No new unchecked tool calls "
                     f"({len(unchecked)} existing in baseline)",
                     file=sys.stderr,
                 )
@@ -251,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if unchecked:
                 print(
-                    f"\n✗ {len(unchecked)} tool calls with no checks",
+                    f"\n\u2717 {len(unchecked)} tool calls with no checks",
                     file=sys.stderr,
                 )
                 return 1
