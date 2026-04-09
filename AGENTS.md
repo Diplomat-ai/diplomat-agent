@@ -1,5 +1,5 @@
 <!-- This file is intentionally public. It describes the project architecture for AI-assisted development. -->
-# AGENTS.md — for AI coding assistants (v0.2.0)
+# AGENTS.md — for AI coding assistants (v0.3.0)
 
 ## What this repo is
 
