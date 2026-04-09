@@ -14,6 +14,7 @@ from diplomat_agent.models import ScanResult
 from diplomat_agent.analyzer.guards import apply_verdicts, build_summary
 from diplomat_agent.analyzer.scenarios import generate_scenarios
 from diplomat_agent.analyzer.checks import apply_missing_hints
+from diplomat_agent.analyzer.owasp import apply_owasp
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -43,7 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--format",
-        choices=["terminal", "markdown", "json", "csaf", "registry"],
+        choices=["terminal", "markdown", "json", "csaf", "sarif", "registry"],
         default="terminal",
         help="Output format (default: terminal)",
     )
@@ -155,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     # --- Apply verdicts ---
     apply_verdicts(tools)
     apply_missing_hints(tools)
+    apply_owasp(tools)
 
     # --- Filter if --unguarded-only ---
     if args.unguarded_only:
@@ -231,6 +233,14 @@ def main(argv: list[str] | None = None) -> int:
             if output_file:
                 write_advisory(csaf, str(output_file))
                 print(f"CSAF advisory written to: {output_file}", file=sys.stderr)
+            else:
+                sys.stdout.write(content + "\n")
+
+        elif args.format == "sarif":
+            from diplomat_agent.reporter.sarif import render_sarif
+            content = render_sarif(result, scanned_path)
+            if output_file:
+                _write_output(content, output_file)
             else:
                 sys.stdout.write(content + "\n")
 
