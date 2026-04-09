@@ -120,7 +120,7 @@ Known false positive rate: ~5% overall. Full methodology, per-repo breakdown, an
 
 diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production — intercepting every tool call before execution with policy evaluation in <50ms and cryptographic receipts.
 
-**[-> See Diplomat in action](https://diplomat.run)** · **[-> Book a discovery call](https://calendly.com/josselin-guarnelli)**
+**[-> See Diplomat in action](https://diplomat.run)** 
 
 ## Known limitations
 
