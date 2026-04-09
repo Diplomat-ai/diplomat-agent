@@ -1,3 +1,4 @@
+<!-- This file is intentionally public. It describes the project architecture for AI-assisted development. -->
 # AGENTS.md — for AI coding assistants (v0.2.0)
 
 ## What this repo is
@@ -26,11 +27,11 @@ diplomat-agent is a static analysis tool that scans Python codebases for tool ca
 PYTHONPATH=src python -m pytest tests/ -v
 ```
 
-201 tests. All must pass before merge.
+264 tests. All must pass before merge.
 
 ## Conventions
 
-- Python 3.10+
+- Python 3.9+
 - `from __future__ import annotations` in all source files
 - No external dependencies in core scanner
 - Patterns are data in `patterns.py`, not logic scattered across the codebase

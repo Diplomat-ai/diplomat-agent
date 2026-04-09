@@ -20,3 +20,6 @@ Initial release.
 - `--fail-on-unchecked` CI gate (alias: `--fail-on-unguarded`) with baseline support
 - `# checked:ok` inline annotation for acknowledged tool calls
 - Benchmarked on Skyvern (382 findings), SurfSense (319), FinRobot (27)
+
+> _Note: benchmark numbers reflect scanner v0.1.0 capabilities.
+> Updated results with v0.2.0 scanner in REALITY_CHECK_RESULTS.md._

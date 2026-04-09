@@ -4,7 +4,7 @@
 >
 > **What this document is not:** a claim that these projects are insecure. These are open-source codebases that teams fork and build on. The guardrails are expected to be added by each team. diplomat-agent checks whether they were.
 
-Scanner version: v0.2.0 · Python 3.10+ · zero dependencies · static analysis only (stdlib `ast`)
+Scanner version: v0.2.0 · Python 3.9+ · zero dependencies · static analysis only (stdlib `ast`)
 
 ---
 
@@ -86,7 +86,7 @@ Frameworks at 83% unguarded is by design — that's how frameworks work. The rel
 **Note on overlap:** A single function with multiple side effects (e.g. a DB write + an HTTP call) appears in multiple rows. Category totals sum to more than the per-repo totals due to this overlap. The per-repo numbers in the table above are deduplicated — use those for aggregate statistics.
 
 | Category | Unguarded instances (with overlap) | Present in X/16 repos | What it detects |
-|----------|-----------------------------------|----------------------|-----------------|
+|----------|-----------------------------------|----------------------|------------------|
 | Database writes | 3,260 | 15/16 | `session.commit()`, `cursor.execute("INSERT/UPDATE")`, `model.save()`, ORM `.create()` |
 | Database deletes | 1,305 | 14/16 | `session.delete()`, `.remove()`, `.drop()`, `cursor.execute("DELETE")` |
 | HTTP writes | 968 | 14/16 | `requests.post/put/patch()`, `httpx.post()`, `aiohttp` writes |

@@ -1,9 +1,10 @@
 # diplomat-agent
 
 [![PyPI version](https://img.shields.io/pypi/v/diplomat-agent)](https://pypi.org/project/diplomat-agent/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue)](https://python.org)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
+[![CI](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml)
 
 > **76% of tool calls in open-source AI agent codebases have zero safeguards at the source.** Find yours in 60 seconds.
 
@@ -108,6 +109,12 @@ Tested on 16 open-source agent codebases (Skyvern, Dify, CrewAI, Khoj, PraisonAI
 
 Known false positive rate: ~5% overall. Full methodology, per-repo breakdown, and known blind spots -> [REALITY_CHECK_RESULTS.md](./REALITY_CHECK_RESULTS.md)
 
+## From scanner to runtime
+
+diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it in production — intercepting every tool call before execution with policy evaluation in <50ms and cryptographic receipts.
+
+**[-> See Diplomat in action](https://diplomat.run)** · **[-> Book a discovery call](https://calendly.com/josselin-guarnelli)**
+
 ## Known limitations
 
 - **Static analysis only** — no runtime or infra-level guards
@@ -132,7 +139,7 @@ Known false positive rate: ~5% overall. Full methodology, per-repo breakdown, an
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.9+
 - Zero dependencies (stdlib `ast` module only)
 - Optional: `rich` for colored terminal output, `pyyaml` for registry
 
