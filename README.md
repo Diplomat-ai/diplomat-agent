@@ -10,6 +10,8 @@
 
 diplomat-agent scans your Python AI agent and reports every function that can change state in the real world — database writes, API calls, emails, payments, file deletions — and tells you which ones have no checks. Two commands. Immediate results.
 
+Aligned with [OWASP Top 10 for Agentic Applications](docs/owasp-agentic-mapping.md). Supports compliance evidence for EU AI Act, NIST AI Agent Standards, and DORA.
+
 ## Quick start
 
 ```bash
@@ -17,7 +19,7 @@ pip install diplomat-agent
 diplomat-agent .
 ```
 
-Other output formats: `--format markdown`, `--format json`, `--format csaf`, `--format registry`.
+Other output formats: `--format markdown`, `--format json`, `--format csaf`, `--format sarif`, `--format registry`.
 
 Output:
 
@@ -93,6 +95,8 @@ Add to your CI pipeline:
 
 If `toolcalls.yaml` exists in the repo, it's used as baseline: only new findings block the build.
 
+For GitHub Code Scanning integration with SARIF, see [SARIF output](docs/sarif.md).
+
 ## toolcalls.yaml — the SBOM for your AI agent
 
 Generate a complete registry of every tool call in your codebase:
@@ -102,6 +106,9 @@ diplomat-agent . --format registry --output-registry toolcalls.yaml
 ```
 
 Think of `toolcalls.yaml` like `requirements.txt` — but for what your agent can *do*, not what it depends on. Commit it to your repo. Diff it in PRs. When your agent gains the ability to write to a new system, the change shows up in the review.
+
+AI-BOMs inventory what your agent is made of. `toolcalls.yaml` inventories what your agent can *do*.
+See [Behavioral BOM](docs/behavioral-bom.md) for the concept and [toolcalls.yaml spec](docs/toolcalls-yaml-spec.md) for the format.
 
 ## Benchmarks
 
@@ -123,6 +130,12 @@ diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it 
 
 ## Learn more
 
+- [OWASP Agentic Top 10 mapping](docs/owasp-agentic-mapping.md)
+- [How diplomat-agent compares to other tools](docs/landscape.md)
+- [Behavioral BOM: what your agent can do](docs/behavioral-bom.md)
+- [toolcalls.yaml specification](docs/toolcalls-yaml-spec.md)
+- [Compliance and regulatory alignment](docs/compliance.md)
+- [SARIF output for GitHub Code Scanning](docs/sarif.md)
 - [CSAF 2.0 advisory generation](docs/csaf.md)
 - [Benchmark results on 16 codebases](docs/benchmarks.md)
 - [Acknowledging tool calls](docs/acknowledge.md)
@@ -132,10 +145,16 @@ diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it 
 
 ## Roadmap
 
+**Next**
+- [ ] OWASP Agentic Top 10 mapping (ASI-01 through ASI-10)
+- [ ] SARIF output for GitHub Code Scanning integration
 - [ ] TypeScript support
-- [ ] MCP server scanning
+
+**Later**
+- [ ] MCP server code scanning (analyzing tool implementations, not descriptions)
+- [ ] Cross-file import resolution
+- [ ] Static-to-runtime bridge: toolcalls.yaml as input for policy engines (Cedar, OPA, Diplomat runtime)
 - [ ] PR comment integration
-- [ ] Runtime enforcement (Diplomat runtime)
 
 ## Requirements
 
