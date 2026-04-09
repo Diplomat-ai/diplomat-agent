@@ -104,6 +104,13 @@ def _render_tool_entry(tool: Tool, buf: StringIO, include_confirmed: bool = Fals
     if include_confirmed and tool.ignored:
         buf.write(f"    confirmed: {_yaml_escape(tool.ignore_reason)}\n")
 
+    # owasp
+    if tool.owasp_agentic:
+        codes = ", ".join(tool.owasp_agentic)
+        buf.write(f"    owasp: [{codes}]\n")
+    else:
+        buf.write("    owasp: []\n")
+
 
 def generate(result: ScanResult, output_path: str | Path, scanned_path: str = ".") -> str:
     """Generate toolcalls.yaml content and write to output_path.
@@ -129,6 +136,7 @@ def generate(result: ScanResult, output_path: str | Path, scanned_path: str = ".
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     buf.write(f"generated: \"{now}\"\n")
     buf.write(f"version: \"{__version__}\"\n")
+    buf.write("spec_version: \"1.0\"\n")
     buf.write(f"path: \"{scanned_path}\"\n")
     buf.write("\n")
 
