@@ -82,6 +82,10 @@ def _plain_tool_block(tool: Tool) -> str:
         if tool.verdict == "UNGUARDED" and tool.missing_hints:
             lines.append("  ⤷ " + " · ".join(tool.missing_hints))
 
+        # Show OWASP Agentic codes
+        if tool.owasp_agentic:
+            lines.append("  OWASP: " + " · ".join(tool.owasp_agentic))
+
     verdict_label = _VERDICT_LABELS.get(tool.verdict, tool.verdict)
     lines.append(f"  Governance: {verdict_label}")
     return "\n".join(lines)
@@ -302,6 +306,9 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
 
         if tool.verdict == "UNGUARDED" and tool.missing_hints:
             console.print("  [dim]⤷ " + " · ".join(tool.missing_hints) + "[/dim]")
+
+        if tool.owasp_agentic:
+            console.print("  [cyan]OWASP: " + " · ".join(tool.owasp_agentic) + "[/cyan]")
 
     verdict_label = _VERDICT_LABELS.get(tool.verdict, tool.verdict)
     if tool.verdict == "UNGUARDED":
