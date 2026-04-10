@@ -122,6 +122,28 @@ diplomat-agent finds the problem. **[Diplomat](https://diplomat.run)** fixes it 
 
 **[-> See Diplomat in action](https://diplomat.run)** 
 
+## Runtime enforcement: diplomat-gate
+
+diplomat-agent finds unguarded tool calls. [diplomat-gate](https://github.com/Diplomat-ai/diplomat-gate) enforces approval policies at runtime.
+
+```bash
+pip install diplomat-gate
+```
+
+```python
+from diplomat_gate import Gate
+
+gate = Gate.from_yaml("gate.yaml")
+verdict = gate.evaluate({"action": "charge_card", "amount": 15000})
+# → STOP — Amount 15000 exceeds limit of 10000
+```
+
+9 payment policies + 4 email policies. CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
+
+[See diplomat-gate →](https://github.com/Diplomat-ai/diplomat-gate)
+
+---
+
 ## Known limitations
 
 - **Static analysis only** — no runtime or infra-level guards
