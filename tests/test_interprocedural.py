@@ -72,8 +72,8 @@ class TestGuardsFromBody:
                 return w""")
     def test_returns_auth_guard(self):
         assert any(g.type=="auth_check" for g in _guards_from_body(self._f(),"require_policy","middleware.py"))
-    def test_full_coverage(self):
-        assert all(g.coverage=="full" for g in _guards_from_body(self._f(),"require_policy","middleware.py") if g.type=="auth_check")
+    def test_partial_coverage(self):
+        assert all(g.coverage=="partial" for g in _guards_from_body(self._f(),"require_policy","middleware.py") if g.type=="auth_check")
     def test_evidence_has_name(self):
         assert any("require_policy" in g.evidence for g in _guards_from_body(self._f(),"require_policy","middleware.py"))
     def test_evidence_has_source(self):
@@ -122,3 +122,31 @@ class TestIntegration:
         assert t.verdict == "UNGUARDED"
     def test_scan_file_standalone_works(self): assert isinstance(scan_file(FIXTURES/"tools.py"), list)
     def test_scan_file_finds_side_effects(self): assert any(t.name=="delete_record" for t in scan_file(FIXTURES/"tools.py"))
+
+class TestRelativeImports:
+    def test_resolves_parent_import(self):
+        root = Path(__file__).parent / "fixtures" / "relative_imports"
+        idx = PackageIndex(root)
+        tools_file = root / "pkg" / "subpkg" / "tools.py"
+        tree = ast.parse(tools_file.read_text())
+        dec = None
+        for n in ast.walk(tree):
+            if isinstance(n, ast.FunctionDef) and n.name == "delete_item":
+                dec = n.decorator_list[0]; break
+        guards = idx.resolve_decorator_guards(dec, tools_file)
+        assert any(g.type == "auth_check" for g in guards)
+
+class TestSecurity:
+    def test_prevents_escape_from_root(self, tmp_path):
+        # Create a file outside the root
+        outside = tmp_path / "outside.py"
+        outside.write_text("def p(fn): return fn")
+        
+        root = tmp_path / "root"
+        root.mkdir()
+        tools = root / "tools.py"
+        # Attempt to import from outside using relative path (not possible via normal import, 
+        # but _resolve_module might be called with suspicious input if logic is weak)
+        idx = PackageIndex(root)
+        # Manually verify _resolve_module rejects absolute paths outside root
+        assert idx._resolve_module("anything", tools, level=10) is None

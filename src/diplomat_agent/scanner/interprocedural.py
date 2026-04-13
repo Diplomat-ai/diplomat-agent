@@ -8,22 +8,13 @@ from __future__ import annotations
 import ast, logging
 from pathlib import Path
 from diplomat_agent.models import Guard
+from diplomat_agent.scanner.patterns import (
+    INTER_PROC_AUTH_RAISE_VOCAB,
+    INTER_PROC_AUTH_CONDITION_VOCAB,
+    INTER_PROC_RATE_LIMIT_VOCAB,
+)
 
 log = logging.getLogger(__name__)
-
-_AUTH_RAISE_VOCAB: frozenset[str] = frozenset({
-    "autherror","authorizationerror","authenticationerror","authfailed",
-    "notauthenticated","unauthenticated","permissionerror","permissiondenied",
-    "accessdenied","forbidden","unauthorized","httperror","httpexception","abort",
-})
-_AUTH_CONDITION_VOCAB: frozenset[str] = frozenset({
-    "current_user","is_authenticated","is_authorized","has_permission",
-    "is_logged_in","authenticated","authorized","verify_token",
-    "check_permission","get_current_user",
-})
-_RATE_LIMIT_VOCAB: frozenset[str] = frozenset({
-    "rate_limit","ratelimit","throttle","limiter","check_rate","is_limited","slowapi","limits",
-})
 
 def _any_in(name: str, vocab: frozenset[str]) -> bool:
     low = name.lower()
@@ -39,20 +30,20 @@ class _BodyAnalyser(ast.NodeVisitor):
             exc = node.exc
             if isinstance(exc, ast.Call): exc = exc.func
             exc_name = exc.id if isinstance(exc, ast.Name) else (exc.attr if isinstance(exc, ast.Attribute) else "")
-            if _any_in(exc_name, _AUTH_RAISE_VOCAB):
+            if _any_in(exc_name, INTER_PROC_AUTH_RAISE_VOCAB):
                 self.auth_evidence.append(ast.unparse(node.exc)[:80])
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
         name = func.id if isinstance(func, ast.Name) else (func.attr if isinstance(func, ast.Attribute) else "")
-        if _any_in(name, _AUTH_RAISE_VOCAB): self.auth_evidence.append(ast.unparse(node)[:80])
-        if _any_in(name, _RATE_LIMIT_VOCAB): self.rate_limit_evidence.append(ast.unparse(node)[:80])
+        if _any_in(name, INTER_PROC_AUTH_RAISE_VOCAB): self.auth_evidence.append(ast.unparse(node)[:80])
+        if _any_in(name, INTER_PROC_RATE_LIMIT_VOCAB): self.rate_limit_evidence.append(ast.unparse(node)[:80])
         self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
         test_src = ast.unparse(node.test).lower()
-        if any(token in test_src for token in _AUTH_CONDITION_VOCAB):
+        if any(token in test_src for token in INTER_PROC_AUTH_CONDITION_VOCAB):
             for stmt in node.body:
                 if isinstance(stmt, (ast.Raise, ast.Return, ast.Expr)):
                     self.auth_evidence.append(ast.unparse(node.test)[:80]); break
@@ -67,14 +58,18 @@ def _guards_from_body(dec_def, dec_name: str, source_label: str) -> list[Guard]:
     for stmt in dec_def.body: a.visit(stmt)
     guards = []
     if a.auth_evidence:
-        guards.append(Guard(type="auth_check", evidence=f"@{dec_name} body ({source_label}): {a.auth_evidence[0]}", line=dec_def.lineno, coverage="full"))
+        guards.append(Guard(type="auth_check", evidence=f"@{dec_name} body ({source_label}): {a.auth_evidence[0]}", line=dec_def.lineno, coverage="partial"))
     if a.rate_limit_evidence:
-        guards.append(Guard(type="rate_limit", evidence=f"@{dec_name} body ({source_label}): {a.rate_limit_evidence[0]}", line=dec_def.lineno, coverage="full"))
+        guards.append(Guard(type="rate_limit", evidence=f"@{dec_name} body ({source_label}): {a.rate_limit_evidence[0]}", line=dec_def.lineno, coverage="partial"))
     return guards
 
 
 class PackageIndex:
-    """Lazily parses same-package .py files to resolve decorator definitions."""
+    """Lazily parses same-package .py files to resolve decorator definitions.
+
+    Note: Class-level decorators (methods defined inside a class) are currently
+    not indexed and will not be resolved by this index.
+    """
     def __init__(self, package_root: Path) -> None:
         self.root = package_root.resolve()
         self._defs: dict = {}
@@ -92,7 +87,7 @@ class PackageIndex:
         imports = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
-                resolved = self._resolve_module(node.module, file_path)
+                resolved = self._resolve_module(node.module, file_path, level=node.level)
                 if resolved:
                     for alias in node.names:
                         imports[alias.asname or alias.name] = resolved
@@ -103,13 +98,25 @@ class PackageIndex:
                         imports[alias.asname or alias.name.split(".")[0]] = resolved
         self._imports[file_path] = imports
 
-    def _resolve_module(self, module_name: str, from_file: Path):
-        candidate = self.root
-        for part in module_name.lstrip(".").split("."): candidate = candidate / part
+    def _resolve_module(self, module_name: str, from_file: Path, level: int = 0):
+        if level > 0:
+            candidate = from_file.parent
+            for _ in range(level - 1):
+                candidate = candidate.parent
+        else:
+            candidate = self.root
+
+        for part in module_name.split("."):
+            candidate = candidate / part
+
         f = candidate.with_suffix(".py")
-        if f.exists(): return f.resolve()
+        if f.exists():
+            resolved = f.resolve()
+            return resolved if resolved.is_relative_to(self.root) else None
         i = candidate / "__init__.py"
-        if i.exists(): return i.resolve()
+        if i.exists():
+            resolved = i.resolve()
+            return resolved if resolved.is_relative_to(self.root) else None
         return None
 
     def _lookup_def(self, name: str, from_file: Path):

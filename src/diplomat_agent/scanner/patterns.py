@@ -701,3 +701,23 @@ EXCLUDED_FILE_PATTERNS: tuple[str, ...] = (
     "_test.py",
     "conftest.py",
 )
+
+# ---------------------------------------------------------------------------
+# Inter-procedural decorator body analysis patterns
+# ---------------------------------------------------------------------------
+
+INTER_PROC_AUTH_RAISE_VOCAB: frozenset[str] = frozenset({
+    "autherror", "authorizationerror", "authenticationerror", "authfailed",
+    "notauthenticated", "unauthenticated", "permissionerror", "permissiondenied",
+    "accessdenied", "forbidden", "unauthorized", "httperror", "httpexception", "abort",
+})
+
+INTER_PROC_AUTH_CONDITION_VOCAB: frozenset[str] = frozenset({
+    "current_user", "is_authenticated", "is_authorized", "has_permission",
+    "is_logged_in", "authenticated", "authorized", "verify_token",
+    "check_permission", "get_current_user",
+})
+
+INTER_PROC_RATE_LIMIT_VOCAB: frozenset[str] = frozenset({
+    "rate_limit", "ratelimit", "throttle", "limiter", "check_rate", "is_limited", "slowapi", "limits",
+})
