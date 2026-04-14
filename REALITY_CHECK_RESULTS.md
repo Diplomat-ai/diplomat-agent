@@ -18,8 +18,8 @@ We believe in showing our work. Here's what the scanner doesn't handle well:
 - `publish` pattern (609 matches) captures MQTT `channel.publish()` and message queue patterns alongside actual content publishing. The word "publish" appears in many non-risky contexts.
 
 **Known blind spots:**
-- No inter-procedural analysis: if function A calls function B which calls `session.delete()`, only B is flagged.
-- No import resolution: if you alias `import requests as r`, the scanner won't catch `r.post()`.
+- Limited inter-procedural analysis: decorators are resolved across files, but general call chains (function A calls function B which calls `session.delete()`) are still analyzed intra-procedurally.
+- No import resolution for aliases: if you alias `import requests as r`, the scanner won't catch `r.post()`.
 
 **If you find something we missed or got wrong, open an issue.** We'd rather fix it than pretend it's not there.
 
@@ -161,7 +161,7 @@ Every number in this document is reproducible. If you get different results, ope
 
 | Gap | Impact | Status |
 |-----|--------|--------|
-| Inter-procedural analysis | Can't follow function A → function B → side effect | Known limitation |
+| Inter-procedural analysis | Support for same-package decorator resolution | Partial (decorators only) |
 | Import aliases (`import requests as r`) | Misses aliased calls | Known limitation |
 | TypeScript agents | Only Python supported | Roadmap |
 | Runtime-generated tool calls | Static analysis can't see dynamic tool registration | By design |

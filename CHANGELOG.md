@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-04-14
+
+Inter-procedural decorator resolution and security hardening.
+
+- Support for resolving decorators across files within the same package
+- Body analysis for decorators to detect auth checks and rate limiting
+- Hardened module resolution with path containment checks
+- Correct handling of relative imports (`from . import ...`) in scanners
+- Documentation updates reflecting new architectural capabilities
+
 ## 0.3.0 — 2026-04-09
 
 Competitive positioning and standards alignment.

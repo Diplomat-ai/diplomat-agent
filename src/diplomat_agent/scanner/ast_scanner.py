@@ -11,6 +11,7 @@ import textwrap
 from pathlib import Path
 
 from diplomat_agent.models import Guard, SideEffect, Tool
+from diplomat_agent.scanner.interprocedural import PackageIndex
 from diplomat_agent.scanner.patterns import (
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
@@ -295,26 +296,24 @@ class _GuardVisitor(ast.NodeVisitor):
 
 
 def _detect_decorator_guards(
-    decorators: list[ast.expr], source_lines: list[str]
+    decorators: list[ast.expr],
+    source_lines: list[str],
+    from_file: Path | None = None,
+    package_index: "PackageIndex | None" = None,
 ) -> list[Guard]:
-    """Detect guards from function decorators."""
+    """Detect guards from decorators (name-based first, then inter-procedural)."""
     guards: list[Guard] = []
     for dec in decorators:
         dec_str = ast.unparse(dec).lower()
+        matched_by_name = False
         for pattern in GUARD_PATTERNS:
             match = pattern["match"]
             if "decorator_contains" in match:
                 if any(s.lower() in dec_str for s in match["decorator_contains"]):
-                    line = getattr(dec, "lineno", 0)
-                    evidence = _src(dec, source_lines)
-                    guards.append(
-                        Guard(
-                            type=pattern["type"],
-                            evidence=evidence,
-                            line=line,
-                            coverage=pattern["coverage"],
-                        )
-                    )
+                    guards.append(Guard(type=pattern["type"], evidence=_src(dec, source_lines), line=getattr(dec, "lineno", 0), coverage=pattern["coverage"]))
+                    matched_by_name = True
+        if not matched_by_name and package_index is not None and from_file is not None:
+            guards.extend(package_index.resolve_decorator_guards(dec, from_file))
     return guards
 
 
@@ -441,6 +440,7 @@ def _analyze_function(
     source_lines: list[str],
     file_path: str,
     module_imports: set[str],
+    package_index: "PackageIndex | None" = None,
 ) -> Tool | None:
     """Analyze a single function/method and return a Tool if it has side effects."""
     # --- Collect side effects (body only, skip decorators) ---
@@ -483,7 +483,7 @@ def _analyze_function(
         params.append({"name": arg.arg, "type": type_str, "numeric": is_numeric, "has_bounds": False})
 
     # --- Collect guards ---
-    dec_guards = _detect_decorator_guards(func_node.decorator_list, source_lines)
+    dec_guards = _detect_decorator_guards(func_node.decorator_list, source_lines, from_file=Path(file_path), package_index=package_index)
     imp_guards = _detect_import_guards(module_imports, file_path)
     dep_guards = _detect_depends_guards(func_node, source_lines)
 
@@ -579,7 +579,7 @@ def _analyze_function(
 # ---------------------------------------------------------------------------
 
 
-def scan_file(file_path: Path) -> list[Tool]:
+def scan_file(file_path: Path, package_index: "PackageIndex | None" = None) -> list[Tool]:
     """Parse a single Python file and return all tools found."""
     source = file_path.read_text(encoding="utf-8", errors="replace")
     source_lines = source.splitlines()
@@ -599,6 +599,7 @@ def scan_file(file_path: Path) -> list[Tool]:
                 source_lines=source_lines,
                 file_path=str(file_path),
                 module_imports=module_imports,
+                package_index=package_index,
             )
             if tool is not None:
                 tools.append(tool)
@@ -645,9 +646,11 @@ def scan_directory(root: Path) -> list[Tool]:
     files_scanned = 0
     files_skipped = 0
 
+    package_index = PackageIndex(root)
+
     for py_file, included in _iter_all_python_files(root):
         if included:
-            file_tools = scan_file(py_file)
+            file_tools = scan_file(py_file, package_index=package_index)
             tools.extend(file_tools)
             files_scanned += 1
         else:

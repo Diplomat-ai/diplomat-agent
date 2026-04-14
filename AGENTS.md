@@ -18,7 +18,7 @@ diplomat-agent is a static analysis tool that scans Python codebases for tool ca
 
 - **AST, not regex.** We parse Python source with the stdlib `ast` module. Regex would miss nested calls and produce false positives on strings/comments.
 - **stdlib only.** Zero required dependencies. `rich` is optional for terminal color, `pyyaml` for YAML output.
-- **No inter-procedural analysis.** Each function is analyzed in isolation. This limits depth but keeps the scanner fast and predictable.
+- **Limited inter-procedural analysis.** Decorators are resolved across files within the same package to detect guards in their bodies. General call chains are still analyzed intra-procedurally.
 - **Effects and checks, not risk scores.** The scanner reports what it sees. It does not assign severity or suggest fixes.
 
 ## Running tests
