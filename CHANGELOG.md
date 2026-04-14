@@ -1,24 +1,19 @@
 # Changelog
 
-## 0.4.0 — 2026-04-14
-
-Inter-procedural decorator resolution and security hardening.
-
-- Support for resolving decorators across files within the same package
-- Body analysis for decorators to detect auth checks and rate limiting
-- Hardened module resolution with path containment checks
-- Correct handling of relative imports (`from . import ...`) in scanners
-- Documentation updates reflecting new architectural capabilities
-
 ## 0.3.0 — 2026-04-09
 
-Competitive positioning and standards alignment.
+Inter-procedural analysis, standards alignment, competitive positioning.
 
+- Inter-procedural decorator resolution within same package (#6, @sakshar2303)
+- Body analysis for decorators to detect auth checks and rate limiting
+- Hardened module resolution with path containment checks
+- Relative import handling (`from . import ...`) in scanners
 - OWASP Agentic Top 10 mapping: findings now include ASI-01 through ASI-10 codes
 - SARIF 2.1.0 output format for GitHub Code Scanning (`--format sarif`)
 - `toolcalls.yaml` spec v1.0 formalized with `spec_version` and `owasp` fields
 - New docs: competitive landscape, behavioral BOM concept, compliance alignment, OWASP mapping, SARIF guide
 - GitHub topics: added `governance`, `sbom`
+- 309 tests (was 264), 0 regressions
 
 ## 0.2.0 — 2026-03-25
 

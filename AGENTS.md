@@ -27,7 +27,7 @@ diplomat-agent is a static analysis tool that scans Python codebases for tool ca
 PYTHONPATH=src python -m pytest tests/ -v
 ```
 
-264 tests. All must pass before merge.
+309 tests. All must pass before merge.
 
 ## Conventions
 
