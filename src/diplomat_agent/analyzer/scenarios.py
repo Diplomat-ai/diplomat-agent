@@ -2,7 +2,6 @@
 
 Scenarios are conservative order-of-magnitude estimates, not precise calculations.
 """
-
 from __future__ import annotations
 
 from diplomat_agent.models import Scenario, Tool

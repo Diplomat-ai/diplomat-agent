@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.4.0] — 2026-04-14
+
+### Added
+- **IDE integration** — zero-install support for 3 major AI-powered IDEs:
+  - GitHub Copilot Chat: `.github/agents/diplomat-reviewer.agent.md`
+  - Claude Code: `AGENTS.md` with reviewer instructions
+  - Cursor: `.cursor/rules/diplomat-reviewer.mdc`
+- **`scan` subcommand** — `diplomat-agent scan .` now works alongside
+  the original `diplomat-agent .` syntax. All documentation uses `scan`.
+- **`--file <path>`** — scan a single file instead of an entire directory.
+  Returns results in < 200ms.
+- **`--diff-only`** — scan only files modified since the last git commit.
+  Designed for vibe coding workflows with frequent commits.
+- **`--format sarif`** — SARIF 2.1.0 output with 9 stable rule IDs
+  (DA001–DA009). Compatible with VS Code SARIF Viewer, GitHub Advanced
+  Security (`upload-sarif` action), and any SARIF consumer.
+- **Pre-commit hook** — `.pre-commit-hooks.yaml` for direct installation
+  from the diplomat-agent repo.
+- **`summary.mode`** — JSON output now includes `"mode": "diff-only"`
+  and `files_scanned`/`files_changed` counts when `--diff-only` is used.
+- **Inter-procedural decorator guard resolution** — the scanner now
+  follows decorators defined in the same package to detect guards
+  applied via wrappers (e.g. `@rate_limit` defined in a utils module).
+
+### Changed
+- **JSON schema rewrite (breaking)** — `--format json` output structure
+  changed. Old: `{"tools": [], "scenarios": []}`. New:
+  `{"version": "", "findings": [], "summary": {}, "scan_time_ms": 0}`.
+  If you parse JSON output programmatically, update your code.
+- **SARIF rules are now static** — all 9 rules (DA001–DA009) are always
+  emitted in `driver.rules`, regardless of scan results. Previously,
+  only rules matching found categories were emitted.
+
+### Fixed
+- `diplomat-agent scan .` now works (previously only `diplomat-agent .`
+  was recognized, causing all documentation examples to fail).
+
+### Migration guide (JSON schema)
+
+If you consume `--format json` output:
+
+| Old field | New field |
+|---|---|
+| `summary.total_tools` | `summary.total` |
+| `tools` (array) | `findings` (array) |
+| `scenarios` (array) | removed |
+| — | `version` (new) |
+| — | `scan_time_ms` (new) |
+| — | `summary.mode` (new, only with `--diff-only`) |
+
+Each finding object fields are unchanged: `function`, `file`, `line`,
+`actions`, `checks`, `missing`, `verdict`.
+
 ## 0.3.0 — 2026-04-09
 
 Inter-procedural analysis, standards alignment, competitive positioning.
