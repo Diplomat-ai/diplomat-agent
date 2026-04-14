@@ -25,3 +25,7 @@ data/
 
 # OS
 .DS_Store
+
+# Internal verification artifacts
+VERIFICATION_RESULTS.md
+run_verification.sh

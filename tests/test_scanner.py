@@ -213,8 +213,8 @@ class TestJsonReport:
         result = _make_result(LANGGRAPH)
         output = render_json(result, str(LANGGRAPH))
         data = json.loads(output)
-        assert "tools" in data
-        assert "scenarios" in data
+        assert "findings" in data
+        assert "version" in data
         assert "summary" in data
         assert "scanned_path" in data
 
@@ -223,7 +223,7 @@ class TestJsonReport:
         output = render_json(result, str(LANGGRAPH))
         data = json.loads(output)
         s = data["summary"]
-        assert s["total_tools"] == s["unguarded"] + s["partially_guarded"] + s["guarded"] + s["low_risk"]
+        assert s["total"] == s["unguarded"] + s["partially_guarded"] + s["guarded"] + s["low_risk"]
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +504,7 @@ class TestEffectType:
         assert "llm_call" in types
 
     def test_effect_type_in_json_output(self):
-        """The 'type' field must appear in JSON report output."""
+        """The 'actions' field must appear in JSON report output."""
         tools = scan_directory(LANGGRAPH)
         apply_verdicts(tools)
         scenarios = generate_scenarios(tools)
@@ -512,11 +512,9 @@ class TestEffectType:
         result = ScanResult(tools=tools, scenarios=scenarios, summary=summary)
         output = render_json(result, str(LANGGRAPH))
         data = json.loads(output)
-        for t in data["tools"]:
-            for e in t["side_effects"]:
-                assert "type" in e, f"Missing 'type' key in side_effect of {t['name']}"
-                assert e["type"] != "unknown"
-                assert e["type"] != ""
+        for f in data["findings"]:
+            assert "actions" in f, f"Missing 'actions' key in finding {f['function']}"
+            assert "verdict" in f
 
 
 # ---------------------------------------------------------------------------
@@ -690,7 +688,7 @@ class TestSummaryFileStats:
         assert "files_skipped" in summary
 
     def test_summary_file_stats_in_json(self):
-        """files_scanned and files_skipped must appear in JSON output."""
+        """total and unguarded must appear in JSON summary."""
         tools = scan_directory(LANGGRAPH)
         apply_verdicts(tools)
         from diplomat_agent.scanner.ast_scanner import last_scan_stats
@@ -700,9 +698,9 @@ class TestSummaryFileStats:
         output = render_json(result, str(LANGGRAPH))
         data = json.loads(output)
         s = data["summary"]
-        assert "files_scanned" in s
-        assert "files_skipped" in s
-        assert s["files_scanned"] > 0
+        assert "total" in s
+        assert "unguarded" in s
+        assert s["total"] > 0
 
     def test_skipped_counts_excluded_dirs(self, tmp_path):
         """files_skipped must count .py files in excluded directories."""

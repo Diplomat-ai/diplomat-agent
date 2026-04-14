@@ -116,14 +116,14 @@ class TestRenderJson:
         result = _make_handcrafted_result()
         output = render_json(result, "./test/")
         data = json.loads(output)
-        for key in ("scanned_path", "summary", "tools", "scenarios"):
+        for key in ("scanned_path", "summary", "findings", "version"):
             assert key in data
 
     def test_json_tools_count(self):
         result = _make_handcrafted_result()
         output = render_json(result, "./test/")
         data = json.loads(output)
-        assert len(data["tools"]) == 2
+        assert len(data["findings"]) == 2
 
     def test_json_summary_integrity(self):
         result = _make_handcrafted_result()
@@ -131,16 +131,16 @@ class TestRenderJson:
         data = json.loads(output)
         s = data["summary"]
         total = s["unguarded"] + s["partially_guarded"] + s["guarded"] + s["low_risk"]
-        assert s["total_tools"] == total
+        assert s["total"] == total
 
-    def test_json_scenario_has_required_fields(self):
+    def test_json_finding_has_required_fields(self):
         result = _make_handcrafted_result()
         output = render_json(result, "./test/")
         data = json.loads(output)
-        if data["scenarios"]:
-            sc = data["scenarios"][0]
-            for field in ("tool_name", "description", "risk_category", "estimated_impact"):
-                assert field in sc
+        if data["findings"]:
+            f = data["findings"][0]
+            for field in ("function", "file", "line", "actions", "checks", "missing", "verdict"):
+                assert field in f
 
 
 # ---------------------------------------------------------------------------

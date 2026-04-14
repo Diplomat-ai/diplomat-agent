@@ -3,7 +3,6 @@
 Works without rich. If rich is installed, uses colors and formatting.
 The output format exactly matches the README.md example.
 """
-
 from __future__ import annotations
 
 import sys

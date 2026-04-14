@@ -2,11 +2,13 @@
 
 Parses arguments and routes to the appropriate scan mode.
 """
-
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 from diplomat_agent import __version__
@@ -24,6 +26,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Scan your agentic codebase for tool calls with real-world side effects "
             "and no governance. No config required."
         ),
+        epilog="Tip: 'diplomat-agent scan <path>' and 'diplomat-agent <path>' are equivalent.",
     )
     parser.add_argument(
         "path",
@@ -31,6 +34,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=".",
         metavar="PATH",
         help="Directory to scan (default: current directory)",
+    )
+    parser.add_argument(
+        "--file",
+        metavar="FILE",
+        help="Scan a single Python file instead of a directory",
+    )
+    parser.add_argument(
+        "--diff-only",
+        action="store_true",
+        help="Only scan files modified since the last git commit",
     )
     parser.add_argument(
         "--config",
@@ -123,8 +136,21 @@ def _write_output(content: str, output_path: Path | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Main entry point. Returns exit code."""
+    # Support 'scan' subcommand: strip it so both syntaxes are identical.
+    # diplomat-agent scan <path> → diplomat-agent <path>
+    if argv is not None:
+        if argv and argv[0] == "scan":
+            argv = argv[1:]
+    else:
+        import sys as _sys
+        raw = _sys.argv[1:]
+        if raw and raw[0] == "scan":
+            argv = raw[1:]
+
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    scan_start = time.monotonic()
 
     # --- Determine scan target ---
     file_stats: dict[str, int] | None = None
@@ -142,6 +168,69 @@ def main(argv: list[str] | None = None) -> int:
         except (FileNotFoundError, ValueError) as exc:
             print(f"Error reading config: {exc}", file=sys.stderr)
             return 2
+    elif args.file:
+        # --file: scan a single file
+        file_path = Path(args.file).resolve()
+        if not file_path.exists():
+            if args.format == "json":
+                sys.stdout.write(json.dumps({"error": f"File not found: {args.file}"}) + "\n")
+                return 2
+            print(f"Error: file not found: {args.file}", file=sys.stderr)
+            return 2
+        if not file_path.is_file():
+            print(f"Error: not a file: {args.file}", file=sys.stderr)
+            return 2
+        scanned_path = str(file_path)
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        tools = scan_file(file_path)
+        file_stats = {"files_scanned": 1, "files_skipped": 0}
+    elif args.diff_only:
+        # --diff-only: scan only git-modified Python files
+        scan_root = Path(args.path).resolve()
+        scanned_path = str(scan_root)
+        try:
+            result = subprocess.run(  # checked:ok — internal git diff, not an agent tool call
+                ["git", "diff", "--name-only", "HEAD"],
+                capture_output=True, text=True,
+                cwd=scan_root,
+            )
+            if result.returncode != 0:
+                print("Warning: not a git repo or git error, falling back to full scan", file=sys.stderr)
+                tools, file_stats = _run_auto_scan(scan_root)
+            else:
+                changed = [
+                    scan_root / f.strip()
+                    for f in result.stdout.splitlines()
+                    if f.strip().endswith(".py")
+                ]
+                # Also include untracked Python files
+                untracked_result = subprocess.run(  # checked:ok — internal git ls-files
+                    ["git", "ls-files", "--others", "--exclude-standard"],
+                    capture_output=True, text=True,
+                    cwd=scan_root,
+                )
+                if untracked_result.returncode == 0:
+                    changed.extend(
+                        scan_root / f.strip()
+                        for f in untracked_result.stdout.splitlines()
+                        if f.strip().endswith(".py")
+                    )
+                from diplomat_agent.scanner.ast_scanner import scan_file
+                tools = []
+                files_scanned = 0
+                for fp in changed:
+                    if fp.exists():
+                        tools.extend(scan_file(fp))
+                        files_scanned += 1
+                file_stats = {
+                    "files_scanned": files_scanned,
+                    "files_skipped": 0,
+                    "mode": "diff-only",
+                    "files_changed": len(changed),
+                }
+        except FileNotFoundError:
+            print("Warning: git not found, falling back to full scan", file=sys.stderr)
+            tools, file_stats = _run_auto_scan(scan_root)
     else:
         scan_root = Path(args.path).resolve()
         if not scan_root.exists():
@@ -152,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         scanned_path = str(scan_root)
         tools, file_stats = _run_auto_scan(scan_root)
+
+    scan_time_ms = int((time.monotonic() - scan_start) * 1000)
 
     # --- Apply verdicts ---
     apply_verdicts(tools)
@@ -207,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
 
         elif args.format == "json":
             from diplomat_agent.reporter.json_report import render_json
-            content = render_json(result, scanned_path)
+            content = render_json(result, scanned_path, scan_time_ms=scan_time_ms, file_stats=file_stats)
             if output_file:
                 _write_output(content, output_file)
             else:

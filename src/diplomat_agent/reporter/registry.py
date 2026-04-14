@@ -3,7 +3,6 @@
 Generates a YAML file documenting all tool calls with side effects,
 grouped by severity: NO CHECKS → PARTIAL CHECKS → CONFIRMED.
 """
-
 from __future__ import annotations
 
 import datetime

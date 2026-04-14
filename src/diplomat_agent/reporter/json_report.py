@@ -1,22 +1,66 @@
-"""JSON reporter — produces structured output for CI integration."""
+"""JSON reporter — produces structured output for IDE agents and CI integration.
+
+Schema contract: fields may be added (backward-compatible), but existing fields
+must not be renamed or removed without a version bump.
+"""
 
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+import time
 from pathlib import Path
 
-from diplomat_agent.models import ScanResult
+from diplomat_agent import __version__
+from diplomat_agent.models import ScanResult, Tool
 
 
-def render_json(result: ScanResult, scanned_path: str) -> str:
-    """Render the scan result as a JSON string."""
-    data: dict = {
-        "scanned_path": scanned_path,
-        "summary": result.summary,
-        "tools": [asdict(t) for t in result.tools],
-        "scenarios": [asdict(s) for s in result.scenarios],
+def _finding(tool: Tool) -> dict:
+    """Convert a Tool to the public finding schema."""
+    finding: dict = {
+        "function": tool.name,
+        "file": tool.file,
+        "line": tool.line,
+        "actions": [se.evidence for se in tool.side_effects],
+        "checks": [
+            {"type": g.type, "detail": g.evidence}
+            for g in tool.guards
+        ],
+        "missing": list(tool.missing_hints),
+        "verdict": tool.verdict,
+        "acknowledged": tool.ignored,
     }
+    if tool.ignored and tool.ignore_reason:
+        finding["acknowledged_reason"] = tool.ignore_reason
+    return finding
+
+
+def render_json(
+    result: ScanResult,
+    scanned_path: str,
+    scan_time_ms: int | None = None,
+    file_stats: dict[str, int] | None = None,
+) -> str:
+    """Render the scan result as a JSON string (new structured schema)."""
+    summary: dict = {
+        "total": result.summary.get("total_tools", len(result.tools)),
+        "unguarded": result.summary.get("unguarded", 0),
+        "partially_guarded": result.summary.get("partially_guarded", 0),
+        "guarded": result.summary.get("guarded", 0),
+        "low_risk": result.summary.get("low_risk", 0),
+    }
+    if file_stats and file_stats.get("mode") == "diff-only":
+        summary["mode"] = "diff-only"
+        summary["files_scanned"] = file_stats.get("files_scanned", 0)
+        summary["files_changed"] = file_stats.get("files_changed", 0)
+
+    data: dict = {
+        "version": __version__,
+        "scanned_path": scanned_path,
+        "summary": summary,
+        "findings": [_finding(t) for t in result.tools],
+    }
+    if scan_time_ms is not None:
+        data["scan_time_ms"] = scan_time_ms
     return json.dumps(data, indent=2)
 
 
