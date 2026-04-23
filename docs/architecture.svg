@@ -1,0 +1,92 @@
+<svg width="900" height="420" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#484f58"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#388bfd"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-yellow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#d29922"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#bc8cff"/>
+    </marker>
+    <filter id="soft-shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="420" fill="#0d1117"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" fill="#8b949e" font-size="13" letter-spacing="0.5">How diplomat-agent works</text>
+
+  <!-- ═══════════════ LEFT: INPUT SOURCES ═══════════════ -->
+  <!-- LangGraph box -->
+  <rect x="30" y="62" width="150" height="48" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="105" y="82" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">LangGraph</text>
+  <text x="105" y="99" text-anchor="middle" fill="#7d8590" font-size="11">graph.ainvoke()</text>
+
+  <!-- CrewAI box -->
+  <rect x="30" y="126" width="150" height="48" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="105" y="146" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">CrewAI</text>
+  <text x="105" y="163" text-anchor="middle" fill="#7d8590" font-size="11">agent.execute()</text>
+
+  <!-- OpenAI Agents box -->
+  <rect x="30" y="190" width="150" height="48" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="105" y="210" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">OpenAI Agents</text>
+  <text x="105" y="227" text-anchor="middle" fill="#7d8590" font-size="11">Runner.run_sync()</text>
+
+  <!-- Any Python box -->
+  <rect x="30" y="254" width="150" height="48" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="105" y="274" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Any Python agent</text>
+  <text x="105" y="291" text-anchor="middle" fill="#7d8590" font-size="11">any codebase</text>
+
+  <!-- Arrows left → center -->
+  <line x1="180" y1="86" x2="296" y2="178" stroke="#30363d" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="180" y1="150" x2="296" y2="185" stroke="#30363d" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="180" y1="214" x2="296" y2="200" stroke="#30363d" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="180" y1="278" x2="296" y2="218" stroke="#30363d" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══════════════ CENTER: DIPLOMAT-AGENT ═══════════════ -->
+  <rect x="298" y="138" width="200" height="126" rx="12" fill="#1c2333" stroke="#388bfd" stroke-width="2" filter="url(#soft-shadow)"/>
+  <text x="398" y="165" text-anchor="middle" fill="#388bfd" font-size="15" font-weight="700" letter-spacing="0.3">diplomat-agent</text>
+  <line x1="318" y1="174" x2="478" y2="174" stroke="#30363d" stroke-width="1"/>
+  <text x="398" y="194" text-anchor="middle" fill="#8b949e" font-size="11">AST static scanner</text>
+  <text x="398" y="211" text-anchor="middle" fill="#8b949e" font-size="11">stdlib ast · zero deps</text>
+  <text x="398" y="228" text-anchor="middle" fill="#8b949e" font-size="11">detects effects + checks</text>
+  <text x="398" y="248" text-anchor="middle" fill="#484f58" font-size="10">~2s on 600 files</text>
+
+  <!-- ═══════════════ RIGHT: OUTPUTS ═══════════════ -->
+
+  <!-- Terminal output -->
+  <rect x="620" y="62" width="248" height="80" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="744" y="84" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="600">Terminal report</text>
+  <text x="744" y="104" text-anchor="middle" fill="#7d8590" font-size="11">⚠ 26 unguarded · ~ 7 partial</text>
+  <text x="744" y="122" text-anchor="middle" fill="#7d8590" font-size="11">✓ 1 confirmed  (34 total)</text>
+
+  <!-- toolcalls.yaml -->
+  <rect x="620" y="170" width="248" height="80" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="744" y="192" text-anchor="middle" fill="#d29922" font-size="13" font-weight="600">toolcalls.yaml</text>
+  <text x="744" y="212" text-anchor="middle" fill="#7d8590" font-size="11">committed registry · PR diffs</text>
+  <text x="744" y="230" text-anchor="middle" fill="#7d8590" font-size="11">Software Bill of Agent Actions</text>
+
+  <!-- CI gate -->
+  <rect x="620" y="278" width="248" height="80" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.5" filter="url(#soft-shadow)"/>
+  <text x="744" y="300" text-anchor="middle" fill="#bc8cff" font-size="13" font-weight="600">CI gate</text>
+  <text x="744" y="320" text-anchor="middle" fill="#7d8590" font-size="11">--fail-on-unchecked</text>
+  <text x="744" y="338" text-anchor="middle" fill="#7d8590" font-size="11">blocks PRs with new findings</text>
+
+  <!-- Arrows center → right -->
+  <line x1="498" y1="178" x2="616" y2="105" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="498" y1="200" x2="616" y2="210" stroke="#d29922" stroke-width="1.5" marker-end="url(#arrow-yellow)"/>
+  <line x1="498" y1="222" x2="616" y2="315" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- Bottom note -->
+  <text x="450" y="390" text-anchor="middle" fill="#484f58" font-size="11">No runtime instrumentation. No code changes. No network calls. Pre-deploy, pre-merge.</text>
+</svg>

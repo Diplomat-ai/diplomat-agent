@@ -1,0 +1,107 @@
+<svg width="900" height="440" viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#388bfd"/>
+    </marker>
+    <marker id="arr-gray" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#484f58"/>
+    </marker>
+    <filter id="sh">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <!-- Monospace font for code -->
+  </defs>
+
+  <rect width="900" height="440" fill="#0d1117"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" fill="#8b949e" font-size="13" letter-spacing="0.5">The toolcalls.yaml lifecycle — commit, review, enforce</text>
+
+  <!-- ════ STEP 1: SCAN ════ -->
+  <rect x="30" y="60" width="170" height="90" rx="10" fill="#161b22" stroke="#388bfd" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="115" y="85" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="700">① Scan</text>
+  <text x="115" y="106" text-anchor="middle" fill="#8b949e" font-size="11">diplomat-agent scan .</text>
+  <text x="115" y="124" text-anchor="middle" fill="#8b949e" font-size="11">--format registry</text>
+  <text x="115" y="142" text-anchor="middle" fill="#484f58" font-size="10">reads your .py files</text>
+
+  <!-- ════ STEP 2: YAML GENERATED ════ -->
+  <rect x="260" y="60" width="200" height="90" rx="10" fill="#161b22" stroke="#d29922" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="360" y="85" text-anchor="middle" fill="#d29922" font-size="13" font-weight="700">② toolcalls.yaml</text>
+  <text x="360" y="106" text-anchor="middle" fill="#8b949e" font-size="11">generated at root</text>
+  <text x="360" y="124" text-anchor="middle" fill="#8b949e" font-size="11">mirror of reality</text>
+  <text x="360" y="142" text-anchor="middle" fill="#484f58" font-size="10">Software Bill of Agent Actions</text>
+
+  <!-- ════ STEP 3: COMMIT ════ -->
+  <rect x="520" y="60" width="160" height="90" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="600" y="85" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="700">③ Commit</text>
+  <text x="600" y="106" text-anchor="middle" fill="#8b949e" font-size="11">git add toolcalls.yaml</text>
+  <text x="600" y="124" text-anchor="middle" fill="#8b949e" font-size="11">git commit</text>
+  <text x="600" y="142" text-anchor="middle" fill="#484f58" font-size="10">baseline is now set</text>
+
+  <!-- ════ STEP 4: PR REVIEW ════ -->
+  <rect x="740" y="60" width="140" height="90" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="810" y="85" text-anchor="middle" fill="#bc8cff" font-size="13" font-weight="700">④ PR review</text>
+  <text x="810" y="106" text-anchor="middle" fill="#8b949e" font-size="11">diff in PR shows</text>
+  <text x="810" y="124" text-anchor="middle" fill="#8b949e" font-size="11">new tool calls</text>
+  <text x="810" y="142" text-anchor="middle" fill="#484f58" font-size="10">explicit + reviewable</text>
+
+  <!-- Arrows top row -->
+  <line x1="200" y1="105" x2="256" y2="105" stroke="#388bfd" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="460" y1="105" x2="516" y2="105" stroke="#388bfd" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="680" y1="105" x2="736" y2="105" stroke="#388bfd" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ════ BOTTOM ROW: YAML CONTENT ════ -->
+
+  <!-- NO CHECKS section -->
+  <rect x="30" y="210" width="255" height="180" rx="10" fill="#161b22" stroke="#f85149" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="30" y="210" width="255" height="32" rx="10" fill="#2a1015"/>
+  <rect x="30" y="234" width="255" height="8" fill="#2a1015"/>
+  <text x="157" y="231" text-anchor="middle" fill="#f85149" font-size="12" font-weight="700" font-family="'JetBrains Mono', monospace">⚠ NO CHECKS</text>
+
+  <text x="48" y="264" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">- function: process_refund</text>
+  <text x="48" y="280" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  actions:</text>
+  <text x="48" y="296" fill="#f85149" font-size="10" font-family="'JetBrains Mono', monospace">    - stripe.Refund.create(...)</text>
+  <text x="48" y="312" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  checks: []</text>
+  <text x="48" y="328" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  missing:</text>
+  <text x="48" y="344" fill="#f85149" font-size="10" font-family="'JetBrains Mono', monospace">    - no bounds on amount</text>
+  <text x="48" y="360" fill="#f85149" font-size="10" font-family="'JetBrains Mono', monospace">    - no rate limit</text>
+  <text x="48" y="378" fill="#484f58" font-size="10" font-family="'JetBrains Mono', monospace"># needs attention</text>
+
+  <!-- PARTIAL section -->
+  <rect x="325" y="210" width="255" height="180" rx="10" fill="#161b22" stroke="#d29922" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="325" y="210" width="255" height="32" rx="10" fill="#201a00"/>
+  <rect x="325" y="234" width="255" height="8" fill="#201a00"/>
+  <text x="452" y="231" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700" font-family="'JetBrains Mono', monospace">~ PARTIAL CHECKS</text>
+
+  <text x="343" y="264" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">- function: update_profile</text>
+  <text x="343" y="280" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  actions:</text>
+  <text x="343" y="296" fill="#d29922" font-size="10" font-family="'JetBrains Mono', monospace">    - session.commit()</text>
+  <text x="343" y="312" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  checks:</text>
+  <text x="343" y="328" fill="#3fb950" font-size="10" font-family="'JetBrains Mono', monospace">    - type: auth_check</text>
+  <text x="343" y="344" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  missing:</text>
+  <text x="343" y="360" fill="#d29922" font-size="10" font-family="'JetBrains Mono', monospace">    - no input validation</text>
+  <text x="343" y="378" fill="#484f58" font-size="10" font-family="'JetBrains Mono', monospace"># partially protected</text>
+
+  <!-- CONFIRMED section -->
+  <rect x="620" y="210" width="255" height="180" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="620" y="210" width="255" height="32" rx="10" fill="#0a1c0a"/>
+  <rect x="620" y="234" width="255" height="8" fill="#0a1c0a"/>
+  <text x="747" y="231" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700" font-family="'JetBrains Mono', monospace">✓ CONFIRMED</text>
+
+  <text x="638" y="264" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">- function: charge_card</text>
+  <text x="638" y="280" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  actions:</text>
+  <text x="638" y="296" fill="#3fb950" font-size="10" font-family="'JetBrains Mono', monospace">    - stripe.PaymentIntent...</text>
+  <text x="638" y="312" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  checks:</text>
+  <text x="638" y="328" fill="#3fb950" font-size="10" font-family="'JetBrains Mono', monospace">    - type: input_validation</text>
+  <text x="638" y="344" fill="#3fb950" font-size="10" font-family="'JetBrains Mono', monospace">    - type: auth_check</text>
+  <text x="638" y="360" fill="#7d8590" font-size="10" font-family="'JetBrains Mono', monospace">  confirmed: "via API gateway"</text>
+  <text x="638" y="378" fill="#484f58" font-size="10" font-family="'JetBrains Mono', monospace"># reviewed and acknowledged</text>
+
+  <!-- Arrow from yaml box to bottom boxes -->
+  <line x1="360" y1="150" x2="157" y2="207" stroke="#484f58" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-gray)"/>
+  <line x1="360" y1="150" x2="360" y2="207" stroke="#484f58" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-gray)"/>
+  <line x1="360" y1="150" x2="590" y2="207" stroke="#484f58" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-gray)"/>
+
+  <!-- Bottom note -->
+  <text x="450" y="418" text-anchor="middle" fill="#484f58" font-size="11">add  # checked:ok  in source code to move a finding from NO CHECKS → CONFIRMED</text>
+</svg>
