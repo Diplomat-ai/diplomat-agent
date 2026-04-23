@@ -6,17 +6,17 @@
 [![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
 [![CI](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml)
 
-**Your AI agent can call `stripe.Refund.create()` 200 times in a loop.
-diplomat-agent finds these functions before they ship.**
+You deployed a Python AI agent.
+Do you know every function it can call that writes to a database, sends an email,
+charges a card, or deletes data — and which ones have zero checks?
+
+`diplomat-agent` runs a static AST scan and tells you exactly that.
+Zero dependencies. 2 seconds on a 1,000-file repo.
 
 ```bash
 pip install diplomat-agent
 diplomat-agent scan .
 ```
-
-Scans your Python AI agent code. Reports every function that can change
-the real world — and shows which ones have no checks.
-Zero dependencies. 2 seconds on a 1,000-file repo.
 
 ---
 
@@ -46,6 +46,8 @@ Tool calls with side effects: 12
 ────────────────────────────────────────────
 RESULT: 8 unguarded · 3 partial · 1 guarded (12 total)
 ```
+
+![diplomat-agent before/after scan](docs/before_after.svg)
 
 ---
 
@@ -140,6 +142,8 @@ diplomat-agent scan . --diff-only
 diplomat-agent scan . --format registry --output-registry toolcalls.yaml
 ```
 
+![toolcalls.yaml lifecycle](docs/toolcalls_yaml_flow.svg)
+
 Like `requirements.txt` — but for what your agent can do, not what it
 depends on. Commit it. Diff it in PRs. When your agent gains a new
 capability, the change shows up in review.
@@ -187,10 +191,26 @@ def send_alert(message):  # checked:ok — protected by API gateway
 
 ## From scanning to runtime
 
-diplomat-agent finds the gaps. **diplomat-gate** protects them at runtime.
+`diplomat-agent` finds what your agent can do.
+[diplomat-gate](https://github.com/Diplomat-ai/diplomat-gate) stops it from doing the dangerous parts at runtime.
+
+![How diplomat-agent works](docs/architecture.svg)
+
+| Tool              | Stage   | What it does                                                        |
+|-------------------|---------|---------------------------------------------------------------------|
+| diplomat-agent    | Know    | Maps every tool call with side effects. Static. Pre-deploy.         |
+| diplomat-gate     | Decide  | Enforces CONTINUE / REVIEW / STOP at runtime. < 1ms. Zero deps.    |
+| diplomat.run      | Prove   | Immutable audit trail, dashboard, compliance export.                |
 
 ```bash
-pip install diplomat-gate
+# Step 1 — find what your agent can do
+pip install diplomat-agent
+diplomat-agent scan .
+# → 12 unguarded tool calls (8 payments, 4 emails)
+
+# Step 2 — protect them at runtime
+pip install "diplomat-gate[yaml]"
+# → write gate.yaml, wrap your tools with @gate
 ```
 
 ```python
@@ -198,15 +218,15 @@ from diplomat_gate import Gate
 
 gate = Gate.from_yaml("gate.yaml")
 verdict = gate.evaluate({"action": "charge_card", "amount": 15000})
-# → STOP — Amount 15000 exceeds limit of 10000
+# verdict.decision  → STOP
+# verdict.violations → [{"policy": "amount_limit", "message": "Amount 15000 exceeds limit of 10000"}]
 ```
 
 15+ pre-built policies (payments, emails, shell commands).
 CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
 
 [diplomat-gate →](https://github.com/Diplomat-ai/diplomat-gate) ·
-[diplomat.run →](https://diplomat.run) (hosted control plane with
-hash-chained audit trail)
+[diplomat.run →](https://diplomat.run) (hosted control plane with hash-chained audit trail)
 
 ---
 
