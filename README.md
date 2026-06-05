@@ -63,7 +63,7 @@ arguments, or get prompt-injected.
 **Without guards in the code, there's nothing between the LLM's decision
 and the real-world consequence.**
 
-We scanned 16 open-source agent repos. [~71% of tool calls have no guard — measured with inter-procedural tracing across 6,529 tool calls.](REALITY_CHECK_RESULTS.md)
+We scanned 16 open-source agent repos. [~71% of tool calls have no guard — measured with inter-procedural tracing across 6,529 tool calls.](docs/REALITY_CHECK_RESULTS.md)
 
 ---
 
@@ -167,7 +167,7 @@ v0.5.0 with inter-procedural tracing). Frameworks sit higher — absence of guar
 is by design. We scan both identically. Large repos (>400 tool calls) take longer with
 inter-procedural tracing (e.g. CrewAI ~38s).
 
-[Full results on 16 repos →](REALITY_CHECK_RESULTS.md)
+[Full results on 16 repos →](docs/REALITY_CHECK_RESULTS.md)
 
 ---
 
