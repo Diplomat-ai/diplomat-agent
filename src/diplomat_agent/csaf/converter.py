@@ -46,8 +46,10 @@ def _group_to_vulnerability(
                 all_evidences.append(se.evidence)
 
     location_str = ", ".join(locations)
+    mcp_exposed = any(getattr(t, "exposure", "internal") == "mcp_tool" for t in members)
+    mcp_prefix = "[MCP-exposed] " if mcp_exposed else ""
     description = (
-        f"Unguarded tool call '{name}' found at {len(members)} location(s): "
+        f"{mcp_prefix}Unguarded tool call '{name}' found at {len(members)} location(s): "
         f"{location_str}.\nEvidences:\n" + "\n".join(all_evidences)
     )
 

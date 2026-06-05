@@ -63,7 +63,7 @@ arguments, or get prompt-injected.
 **Without guards in the code, there's nothing between the LLM's decision
 and the real-world consequence.**
 
-We scanned 16 open-source agent repos. [76% of tool calls had zero checks.](REALITY_CHECK_RESULTS.md)
+We scanned 16 open-source agent repos. [~71% of tool calls have no guard — measured with inter-procedural tracing across 6,529 tool calls.](REALITY_CHECK_RESULTS.md)
 
 ---
 
@@ -114,7 +114,7 @@ Works in your IDE with zero extension to install:
 ```yaml
 repos:
   - repo: https://github.com/Diplomat-ai/diplomat-agent
-    rev: v0.4.0
+    rev: v0.5.0
     hooks:
       - id: diplomat-agent
 ```
@@ -154,12 +154,18 @@ capability, the change shows up in review.
 
 ## Benchmarks
 
-| Repo | Files | Tool calls | Unguarded | Time |
-|---|---|---|---|---|
-| Skyvern | 595 | 452 | 345 (76%) | ~2s |
-| Dify | 1,000+ | 1,009 | 759 (75%) | ~3s |
-| PraisonAI | — | 1,028 | 911 (89%) | ~2s |
-| CrewAI | — | 348 | 273 (78%) | ~1s |
+| Repo | Type | Tool calls | Unguarded |
+|---|---|---|---|
+| Skyvern | Application | 753 | 435 (58%) |
+| AutoGPT | Application | 668 | 469 (70%) |
+| Dify | Platform | 1,361 | 967 (71%) |
+| PraisonAI | Framework | 1,281 | 1,106 (86%) |
+| CrewAI | Framework | 425 | 317 (75%) |
+
+**Application layer: ~62% unguarded across 2,943 tool calls in 9 repos** (weighted,
+v0.5.0 with inter-procedural tracing). Frameworks sit higher — absence of guards there
+is by design. We scan both identically. Large repos (>400 tool calls) take longer with
+inter-procedural tracing (e.g. CrewAI ~38s).
 
 [Full results on 16 repos →](REALITY_CHECK_RESULTS.md)
 
@@ -242,8 +248,13 @@ CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
 
 - Static analysis only — no runtime detection
 - Python only — TypeScript on the roadmap
-- Intra-procedural + same-package decorators — use `# checked:ok`
-  for guards in external packages
+- Inter-procedural tracing: same-package top-level functions (depth 2). Class methods,
+  cross-package chains, and depth > 2 are not resolved — use `# checked:ok` for guards
+  in those paths or external packages
+- MCP scanning: Python only (FastMCP / official SDK) — TypeScript/Node MCP servers are out of scope
+- MCP scanning: transport-layer auth (OAuth, token gateway) is invisible — "unguarded" means no guard inside the tool function, independent of transport
+- MCP scanning: `@mcp.tool` attribute decorator only — bare `@tool` (from direct import) is not detected in v1
+- MCP scanning: `@server.call_tool()` low-level dispatcher is detected with a warning; per-tool resolution is not supported in v1
 - [Full limitations →](docs/limitations.md)
 
 ## Roadmap
@@ -255,9 +266,9 @@ CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
 - [x] IDE agents (Copilot Chat, Claude Code, Cursor)
 - [x] Pre-commit hook
 - [x] `--diff-only` and `--file` modes
-- [x] Inter-procedural decorator resolution
+- [x] Inter-procedural tracing: decorators + same-package call chains (depth 2)
+- [x] MCP server scanning
 - [ ] TypeScript support
-- [ ] MCP server scanning
 - [ ] VS Code extension (inline diagnostics on save)
 - [ ] PR comment integration
 

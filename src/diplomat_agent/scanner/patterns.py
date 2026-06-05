@@ -33,6 +33,65 @@ ORCHESTRATOR_DECORATORS: list[str] = [
     "task",                 # Airflow, Prefect
 ]
 
+# ---------------------------------------------------------------------------
+# MCP server detection patterns
+# ---------------------------------------------------------------------------
+# Gate: these imports signal that a module is an MCP server. MCP detection is
+# ONLY enabled when at least one of these is present — prevents false positives
+# from random @x.tool decorators that happen to exist outside an MCP context.
+MCP_SERVER_IMPORTS: list[str] = [
+    "mcp.server.fastmcp",   # Official SDK (FastMCP 1.0 integrated)
+    "fastmcp",              # FastMCP v2 standalone (jlowin / PrefectHQ)
+    "mcp.server",           # Low-level API (Server + call_tool)
+]
+
+# @<instance>.tool — the instance name varies (mcp / app / server / etc.).
+# Matched by attribute name only; gated by MCP_SERVER_IMPORTS to prevent FP.
+# NOTE: bare @tool (from fastmcp import tool) is intentionally NOT matched
+# in v1 — the attribute-based matching covers >95% of real-world cases with
+# a lower false-positive risk than matching bare @tool.
+MCP_TOOL_DECORATOR_ATTRS: list[str] = ["tool"]
+
+# Read-only by MCP spec design — excluded from scan.
+MCP_RESOURCE_DECORATOR_ATTRS: list[str] = ["resource", "prompt"]
+
+# Low-level single-dispatcher pattern: @server.call_tool()
+# Per-tool resolution is not supported in v1. A file-level stderr warning
+# is emitted when this decorator is detected in an MCP module.
+MCP_DISPATCH_DECORATOR_ATTRS: list[str] = ["call_tool"]
+
+# FIX 3 — cross-module MCP gate: instance names commonly imported from a
+# shared module (e.g. `from .server import mcp`). When a file imports one of
+# these names via ImportFrom AND uses @<name>.tool(), it is treated as an MCP
+# module even if the originating module is not in MCP_SERVER_IMPORTS.
+MCP_INSTANCE_NAMES: frozenset[str] = frozenset(["mcp", "server", "app"])
+
+# FIX B v1 (v0.5.0) — programmatic tool registration call attributes.
+# Detects mcp.add_tool(fn) / server.add_tool(fn) / app.tool(fn) (call form,
+# not decorator). Only honoured when the receiver name is in
+# MCP_INSTANCE_NAMES AND module_is_mcp gate is True.
+MCP_REGISTRATION_ATTRS: list[str] = ["add_tool", "tool"]
+
+# FIX A v1 ANTI-FP (v0.5.0) — observability helper exclusion list.
+# When tracing inter-procedural side effects, calls to functions matching any
+# of these substrings are NEVER followed. They are pure observability /
+# logging / metrics / tracing concerns and would otherwise inject FAKE
+# side-effects (audit_log.insert, metrics.record, ...) into otherwise read-
+# only tools. Match is case-insensitive substring against the callee's name
+# (last attribute or function name).
+HELPER_CALL_EXCLUDE_PATTERNS: list[str] = [
+    "log_", "_log",
+    "audit_", "_audit",
+    "track_", "_track",
+    "record_", "_record", "record_event", "report_event",
+    "emit_", "_emit",
+    "metric", "_metric",
+    "trace_", "_trace",
+    "monitor_", "_monitor",
+    "telemetry",
+    "report_metric", "report_metrics",
+]
+
 SIDE_EFFECT_PATTERNS: list[dict] = [
     # -----------------------------------------------------------------------
     # Payment / Financial
@@ -372,8 +431,17 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "category": "destructive",
         "risk": 3,
         "match": {
-            "name_contains": ["shutdown", "terminate", "kill_process", "reboot",
+            "name_contains": ["shutdown", "kill_process", "reboot",
                               "format_disk", "wipe", "reset_factory"],
+        },
+    },
+    {
+        # Catch x.terminate() exactly — attr_exact prevents terminate_session(),
+        # terminate_transaction(), etc. from matching (FIX C v0.5.0 precision).
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["terminate"],
         },
     },
     {
@@ -400,6 +468,42 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "match": {
             "obj_exact": ["importlib"],
             "attr_exact": ["import_module"],
+        },
+    },
+    # -----------------------------------------------------------------------
+    # FIX C (v0.5.0) — psutil process control
+    # Process(pid).kill() / .terminate() / .suspend() — irreversible signals
+    # to a chosen pid. obj_contains restricted to psutil-related receivers,
+    # obj_exact for short receivers like "process" / "proc". attr_exact (not
+    # attr_contains) avoids matching reader methods like get_terminated_at()
+    # or terminate_session(). Note: a bare animation_proc.kill() in a module
+    # that does NOT import psutil will not match (obj_contains is psutil-
+    # scoped and obj_exact is restricted to "process"/"proc").
+    # -----------------------------------------------------------------------
+    {
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "obj_contains": ["psutil", "psutil.process"],
+            "attr_exact": ["kill", "terminate", "suspend"],
+        },
+    },
+    {
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "obj_exact": ["process", "proc"],
+            "attr_exact": ["kill", "terminate", "suspend"],
+        },
+    },
+    {
+        # FIX C (v0.5.0) — os.kill / os.killpg signal a chosen pid.
+        # name_contains uses substring match, so this also catches os.killpg
+        # which is acceptable: killpg is destructive too.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "name_contains": ["os.kill"],
         },
     },
 
@@ -544,6 +648,16 @@ READ_ONLY_PATTERNS: list[dict] = [
         },
     },
 ]
+
+# FIX 2 — reader method prefixes: if the final attribute of a call starts
+# with one of these prefixes it is treated as read-only, regardless of the
+# receiver object name. This overrides the http_write obj_contains heuristic
+# so that `client.get_post()` is not flagged as a side effect.
+# Do NOT add: update_, create_, delete_, post_, send_ — those are writes.
+READER_METHOD_PREFIXES: tuple[str, ...] = (
+    "get_", "list_", "read_", "fetch_",
+    "search_", "query_", "find_", "describe_", "show_",
+)
 
 # ---------------------------------------------------------------------------
 # Guard patterns

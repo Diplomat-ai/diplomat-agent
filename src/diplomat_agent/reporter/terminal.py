@@ -47,6 +47,8 @@ def _plain_tool_block(tool: Tool) -> str:
     icon = _VERDICT_ICONS.get(tool.verdict, "?")
     params_str = _format_params(tool)
     sig = f"{tool.name}({params_str})"
+    if tool.exposure == "mcp_tool":
+        sig = f"[MCP] {sig}"
     lines.append(f"{icon} {sig}")
 
     if tool.verdict == "LOW_RISK":
@@ -170,7 +172,12 @@ def _category_risk_hint(category: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_plain(result: ScanResult, scanned_path: str) -> str:
+def render_plain(
+    result: ScanResult,
+    scanned_path: str,
+    mcp_summary: dict | None = None,
+    file_stats: dict | None = None,
+) -> str:
     """Render the full report as plain text."""
     buf = StringIO()
 
@@ -184,6 +191,17 @@ def render_plain(result: ScanResult, scanned_path: str) -> str:
     non_low_risk = [t for t in result.tools if t.verdict != "LOW_RISK"]
     w(f"Tools with side effects: {len(non_low_risk)}")
     w()
+
+    if mcp_summary and mcp_summary["total"] > 0:
+        total = mcp_summary["total"]
+        ug = mcp_summary["unguarded"]
+        pg = mcp_summary["partially_guarded"]
+        gd = mcp_summary["guarded"]
+        w(
+            f"EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}  "
+            f"{ug} UNGUARDED · {pg} PARTIAL · {gd} GUARDED"
+        )
+        w()
 
     if not result.tools:
         w("No tools with side effects detected.")
@@ -214,6 +232,24 @@ def render_plain(result: ScanResult, scanned_path: str) -> str:
     w("  Protected elsewhere → add  # checked:ok — protected by [where]")
     w("  CI enforcement   → --fail-on-unchecked blocks PRs with new unreviewed tool calls")
 
+    if file_stats:
+        unparsed = file_stats.get("files_unparsed", [])
+        if unparsed:
+            w()
+            w(
+                f"\u26a0 {len(unparsed)} file(s) could not be parsed (SyntaxError) and were "
+                f"skipped \u2014 results may be incomplete"
+            )
+            for _p in unparsed:
+                w(f"  {_p}")
+        dispatchers = file_stats.get("dispatcher_files", [])
+        if dispatchers:
+            w()
+            w(
+                f"\u2139 {len(dispatchers)} file(s) use low-level @call_tool dispatcher "
+                f"\u2014 per-tool analysis not supported in v1"
+            )
+
     return buf.getvalue()
 
 
@@ -222,7 +258,12 @@ def render_plain(result: ScanResult, scanned_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_rich(result: ScanResult, scanned_path: str) -> None:
+def _render_rich(
+    result: ScanResult,
+    scanned_path: str,
+    mcp_summary: dict | None = None,
+    file_stats: dict | None = None,
+) -> None:
     """Render the report using rich formatting."""
     console = Console()
 
@@ -234,6 +275,17 @@ def _render_rich(result: ScanResult, scanned_path: str) -> None:
     non_low_risk = [t for t in result.tools if t.verdict != "LOW_RISK"]
     console.print(f"Tools with side effects: [bold]{len(non_low_risk)}[/bold]")
     console.print()
+
+    if mcp_summary and mcp_summary["total"] > 0:
+        total = mcp_summary["total"]
+        ug = mcp_summary["unguarded"]
+        pg = mcp_summary["partially_guarded"]
+        gd = mcp_summary["guarded"]
+        console.print(
+            f"[bold cyan]EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}[/bold cyan]  "
+            f"[red]{ug} UNGUARDED[/red] · [yellow]{pg} PARTIAL[/yellow] · [green]{gd} GUARDED[/green]"
+        )
+        console.print()
 
     for tool in result.tools:
         _render_rich_tool(console, tool)
@@ -260,6 +312,24 @@ def _render_rich(result: ScanResult, scanned_path: str) -> None:
     console.print("  Protected elsewhere → add  [bold]# checked:ok[/bold] — protected by [where]")
     console.print("  CI enforcement   → [bold]--fail-on-unchecked[/bold] blocks PRs with new unreviewed tool calls")
 
+    if file_stats:
+        unparsed = file_stats.get("files_unparsed", [])
+        if unparsed:
+            console.print()
+            console.print(
+                f"[yellow]\u26a0 {len(unparsed)} file(s) could not be parsed (SyntaxError) and were "
+                f"skipped \u2014 results may be incomplete[/yellow]"
+            )
+            for _p in unparsed:
+                console.print(f"  [dim]{_p}[/dim]")
+        dispatchers = file_stats.get("dispatcher_files", [])
+        if dispatchers:
+            console.print()
+            console.print(
+                f"[cyan]\u2139 {len(dispatchers)} file(s) use low-level @call_tool dispatcher "
+                f"\u2014 per-tool analysis not supported in v1[/cyan]"
+            )
+
 
 def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-def]
     params_str = _format_params(tool)
@@ -275,7 +345,8 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
         icon_color = "green"
         icon = "✓"
 
-    console.print(f"[{icon_color}]{icon}[/{icon_color}] [bold]{sig}[/bold]")
+    mcp_badge = "[cyan][MCP][/cyan] " if tool.exposure == "mcp_tool" else ""
+    console.print(f"[{icon_color}]{icon}[/{icon_color}] {mcp_badge}[bold]{sig}[/bold]")
 
     if tool.verdict == "LOW_RISK":
         ro_label = "Read-only:"
@@ -328,6 +399,8 @@ def print_report(
     scanned_path: str,
     use_rich: bool | None = None,
     file=None,
+    mcp_summary: dict | None = None,
+    file_stats: dict | None = None,
 ) -> None:
     """Print the governance report to stdout (or a file handle).
 
@@ -336,6 +409,10 @@ def print_report(
         scanned_path: The path that was scanned (for display).
         use_rich: Force rich on/off. If None, auto-detect.
         file: Output file handle. Defaults to sys.stdout.
+        mcp_summary: Pre-computed MCP stats (before any filtering). If provided
+            and non-empty, an auto-surface header is shown before tool blocks.
+        file_stats: Stats from the scanner (files_scanned, files_unparsed, etc.).
+            If provided, unparsed-file warnings are appended to the report.
     """
     if file is None:
         file = sys.stdout
@@ -343,7 +420,7 @@ def print_report(
     should_use_rich = _RICH_AVAILABLE if use_rich is None else (use_rich and _RICH_AVAILABLE)
 
     if should_use_rich and file is sys.stdout:
-        _render_rich(result, scanned_path)
+        _render_rich(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
     else:
-        output = render_plain(result, scanned_path)
+        output = render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
         file.write(output)

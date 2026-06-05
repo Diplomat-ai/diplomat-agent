@@ -4,7 +4,7 @@
 >
 > **What this document is not:** a claim that these projects are insecure. These are open-source codebases that teams fork and build on. The guardrails are expected to be added by each team. diplomat-agent checks whether they were.
 
-Scanner version: v0.2.0 · Python 3.9+ · zero dependencies · static analysis only (stdlib `ast`)
+Scanner version: **v0.5.0 (June 5, 2026)** · Python 3.9+ · zero dependencies · static + inter-procedural analysis (stdlib `ast`). See [Methodology & version history](#methodology--version-history) for v0.2.0 and v0.4.1 results.
 
 ---
 
@@ -18,7 +18,16 @@ We believe in showing our work. Here's what the scanner doesn't handle well:
 - `publish` pattern (609 matches) captures MQTT `channel.publish()` and message queue patterns alongside actual content publishing. The word "publish" appears in many non-risky contexts.
 
 **Known blind spots:**
-- Limited inter-procedural analysis: decorators are resolved across files, but general call chains (function A calls function B which calls `session.delete()`) are still analyzed intra-procedurally.
+- **Inter-procedural analysis (v0.5.0):** general call chains are now traced. When a tool
+  delegates a side effect to a helper (function A → B → `session.delete()`), the effect is
+  surfaced and attributed to the tool, with both the effect AND the helper’s guards resolved
+  (same-package top-level functions, depth 2).
+  Still out of scope (honest blind spots remaining in v0.5.0):
+  - class methods (`self._helper()`) — planned
+  - cross-package call chains
+  - call depth > 2
+  - dynamically-registered tools (built in loops / runtime factories)
+  - side effects reached only through a typed client instance (e.g. `client.create()`)
 - No import resolution for aliases: if you alias `import requests as r`, the scanner won't catch `r.post()`.
 
 **If you find something we missed or got wrong, open an issue.** We'd rather fix it than pretend it's not there.
@@ -30,13 +39,17 @@ Not all repos in this benchmark are the same. Some are frameworks (CrewAI, Prais
 
 ## Summary
 
+**70.9% of tool calls with real-world side effects have no guard — 4,628 of 6,529, measured
+across 16 OSS agent repos with diplomat-agent v0.5.0 (static + inter-procedural analysis).
+Stable across 2 independent runs (±1 unit, non-determinism only).**
+
 | | |
 |---|---|
-| Repos scanned | 16 (14 with valid results) |
-| Total tool calls with side effects | 7,029 |
-| Unguarded (zero checks) | 5,344 (76%) |
-| Partially guarded | ~1,200 |
-| Fully guarded or acknowledged | ~485 |
+| Repos scanned | 16 (14 with findings; Stripe Agent Toolkit: Python SDK removed from root at HEAD) |
+| Total tool calls with side effects | 6,529 |
+| Unguarded (zero checks) | 4,628 — **70.9%** |
+| Partially guarded | ~1,739 |
+| Fully guarded or acknowledged | ~162 |
 
 "Unguarded" means: the function has at least one side effect (DB write, HTTP call, subprocess, etc.) and **zero** detected checks (no input validation, no rate limit, no auth check, no approval gate, no retry bound).
 
@@ -44,40 +57,54 @@ Not all repos in this benchmark are the same. Some are frameworks (CrewAI, Prais
 
 ## Results by repo
 
-These repos range from agent frameworks (CrewAI) to reference applications (Khoj, Dify, Skyvern). The scanner treats them identically — it maps tool calls and checks whether guards exist in the same function.
+All results measured with diplomat-agent v0.5.0 (static + inter-procedural analysis, depth 2).
+Repos cloned at HEAD June 5, 2026. Command: `PYTHONUTF8=1 diplomat-agent scan <path> --format json`
 
-| Repo | Type | Files | Tool calls | Unguarded | % | Scan time |
-|---|---|---|---|---|---|---|
-| PraisonAI | Framework | ~800 | 1,028 | 911 | 89% | ~2s |
-| CrewAI | Framework | ~400 | 348 | 273 | 78% | ~1s |
-| Skyvern | Application | ~600 | 452 | 345 | 76% | ~2s |
-| AutoGPT | Application | ~500 | 464 | 355 | 76% | ~2s |
-| Dify (backend) | Platform | 1000+ | 1,009 | 759 | 75% | ~3s |
-| Khoj | Application | ~300 | 181 | 125 | 69% | ~1s |
-| SurfSense | Application | ~300 | 315 | 165 | 52% | ~1s |
-| OpenAI Agents | SDK examples | ~100 | 93 | 78 | 84% | <1s |
-| MetaGPT | Framework | ~400 | 205 | 186 | 91% | ~1s |
-| Browser-use | Application | ~200 | 267 | 230 | 86% | ~1s |
-| OpenAgents | Application | ~200 | 178 | 177 | 99% | ~1s |
-| FinRobot | Application | ~100 | 69 | 55 | 80% | <1s |
-| Open-SWE | Application | ~100 | 35 | 34 | 97% | <1s |
-| GPT-Researcher | Application | ~100 | 31 | 27 | 87% | <1s |
-| Composio | Platform | ~50 | 28 | 26 | 93% | <1s |
-| Stripe Agent Toolkit | Benchmark | ~30 | 26 | 14 | 54% | <1s |
+| Repo | Type | Tool calls | Unguarded | % |
+|---|---|---|---|---|
+| PraisonAI | Framework | 1,281 | 1,106 | 86% |
+| CrewAI | Framework | 425 | 317 | 75% |
+| MetaGPT | Framework | 212 | 179 | 84% |
+| Skyvern | Application | 753 | 435 | 58% |
+| AutoGPT | Application | 668 | 469 | 70% |
+| Khoj | Application | 205 | 135 | 66% |
+| SurfSense | Application | 824 | 371 | 45% |
+| Browser-use | Application | 173 | 130 | 75% |
+| OpenAgents | Application | 180 | 174 | 97% |
+| FinRobot | Application | 83 | 64 | 77% |
+| Open-SWE | Application | 47 | 44 | 94% |
+| GPT-Researcher | Application | 10 | 6 | 60% |
+| Dify (backend) | Platform | 1,361 | 967 | 71% |
+| Composio | Platform | 38 | 29 | 76% |
+| OpenAI Agents | SDK examples | 269 | 200 | 74% |
+| Stripe Agent Toolkit | Benchmark | — | — | — |
 
-**Note:** AIHawk and LangChain-community were included in the scan run but produced empty results due to path errors at scan time. They are excluded from all counts.
+**Note on Stripe Agent Toolkit:** the Python SDK was removed from the repo root; only
+`benchmarks/` Python files remain. No tool calls detected. Not included in aggregate counts.
+
+---
+
+> Previous scan results (v0.2.0, v0.4.1) and the full version-over-version comparison
+> are in [Methodology & version history](#methodology--version-history) below.
+
+---
 
 ### By repo type
 
-| Type | Repos | Avg unguarded | What this means |
-|---|---|---|---|
-| Framework | 3 | 83% | Expected — frameworks leave guards to the developer |
-| Application | 9 | 80% | These teams built the product. The guards were theirs to add. |
-| Platform | 2 | 78% | Same pattern as applications |
-| SDK examples | 1 | 84% | Reference code that teams copy |
-| Benchmark | 1 | 54% | Test environment, not representative |
+All figures v0.5.0 (inter-procedural tracing, depth 2). Weighted % = unguarded / total for
+the type, not an average of per-repo percentages.
 
-Frameworks at 83% unguarded is by design — that's how frameworks work. The relevant number is applications: **76% unguarded across 1,992 tool calls in 9 repos** (weighted aggregate). The per-repo average is 80%, but small repos like Open-SWE (35 calls, 97%) and OpenAgents (178 calls, 99%) pull that average up. The weighted number is more representative.
+| Type | Repos | Weighted % unguarded | What this means |
+|---|---|---|---|
+| Framework | 3 | 84% | Expected — frameworks leave guards to the developer |
+| Application | 9 | 62% | These teams built the product. The guards were theirs to add. |
+| Platform | 2 | 71% | Same pattern as applications |
+| SDK examples | 1 | 74% | Reference code that teams copy |
+| Benchmark | 1 | — | Python SDK removed from root; not counted |
+
+Application layer = 1,828/2,943 unguarded (62%), weighted. Frameworks sit higher by
+design — guards are the implementor's responsibility — which lifts the 16-repo global to
+~71%.
 
 ---
 
@@ -131,11 +158,11 @@ Calls `tool_workflow_delete(workflow_id=workflow_id, force=force)` with a `force
 
 ## How to read these numbers
 
-**"76% unguarded" is not a vulnerability score. It's an inventory.**
+**“~71% unguarded” is not a vulnerability score. It’s an inventory.**
 
 Each unguarded tool call is a side effect that can reach production if it's not addressed during the build. A `session.delete()` with no confirmation gate. A `requests.post()` with no rate limit. A `subprocess.run()` with no input validation. None of these are bugs today — but each one becomes a risk the moment an agent calls it autonomously in production.
 
-The 76% tells you how much of that surface exists in the codebase before anyone decides what to do about it. Some of these tool calls will be protected by infrastructure (API gateways, IAM, network policies). Some will be protected by code in other layers that the scanner can't see (middleware, service layer validation). And some will reach production with no protection at all.
+The ~71% tells you how much of that surface exists in the codebase before anyone decides what to do about it. Some of these tool calls will be protected by infrastructure (API gateways, IAM, network policies). Some will be protected by code in other layers that the scanner can't see (middleware, service layer validation). And some will reach production with no protection at all.
 
 diplomat-agent doesn't decide which is which. Your team does. The scanner gives you the inventory so you can make that decision deliberately — at design time, not after an incident.
 
@@ -157,14 +184,40 @@ Every number in this document is reproducible. If you get different results, ope
 
 ---
 
+## Methodology & version history
+
+The headline figure has been re-measured as the scanner’s precision improved. We publish the
+full history rather than just the latest number.
+
+| Version | Date | Total calls | Unguarded | % | What changed |
+|---|---|---|---|---|---|
+| v0.2.0 | Apr 2026 | 7,029 | 5,344 | 76% | Initial study. Intra-procedural only. Repos at HEAD Apr 2026. |
+| v0.4.1 | Jun 4, 2026 | 5,878 | 4,499 | 76.5% | Repos re-cloned at HEAD (corpus drift). Reader-prefix FP fix (FIX 2). Inter-proc for decorators only. |
+| v0.5.0 | Jun 5, 2026 | 6,529 | 4,628 | 70.9% | Inter-procedural call tracing (depth 2). 651 new findings; ~80% already guarded in helper. 129 genuinely new unguarded delegation paths. |
+
+**Why the figure dropped from 76% to 71%:** v0.5.0 added same-package inter-procedural call
+tracing. This surfaced 651 additional delegated side-effects — but 522 of those (80%) were
+already guarded inside the helper function. The shallow scan was overcounting exposed surface
+because it couldn’t see the guards inside the delegation chain. The 129 genuinely new
+unguarded paths represent real exposure that v0.4.1 missed. The drop is a measurement
+instrument improving, not the codebases improving.
+
+**Each number is reproducible** by cloning the listed repos and running the matching scanner
+version. The figure will continue to evolve as coverage deepens (class-method resolution is
+planned for a future release); we treat that as a feature, not an inconsistency.
+
+---
+
 ## What diplomat-agent doesn't detect (yet)
 
 | Gap | Impact | Status |
 |-----|--------|--------|
-| Inter-procedural analysis | Support for same-package decorator resolution | Partial (decorators only) |
+| Inter-procedural: class methods | `self._helper()` call chains not resolved | Planned |
+| Inter-procedural: cross-package | Calls into third-party or separate packages | Not planned (by design) |
+| Inter-procedural: depth > 2 | Long delegation chains (A → B → C → ...) | Not yet |
 | Import aliases (`import requests as r`) | Misses aliased calls | Known limitation |
 | TypeScript agents | Only Python supported | Roadmap |
-| Runtime-generated tool calls | Static analysis can't see dynamic tool registration | By design |
+| Runtime-generated tool calls | Static analysis can’t see dynamic tool registration | By design |
 
 ---
 
@@ -174,9 +227,13 @@ Every number in this document is reproducible. If you get different results, ope
 - **Detection:** 40+ patterns matching function calls with side effects (DB writes, HTTP calls, subprocess, payments, emails, file operations, LLM calls, agent invocations).
 - **Guard detection:** Checks for input validation (Pydantic, type checks), rate limiting, authentication, approval gates, idempotency keys, retry bounds within the same function.
 - **Verdict logic:** `UNGUARDED` = has side effects + zero guards. `PARTIALLY_GUARDED` = has guards but they don't cover all side effects. `GUARDED` = 2+ distinct guard types covering all effects. `LOW_RISK` = no side effects detected.
-- **Scope:** Intra-procedural only. Each function is analyzed independently.
+- **Scope:** Static analysis + inter-procedural tracing for same-package top-level functions
+  (depth 2, cycle-safe). Class methods and cross-package call chains are analyzed
+  intra-procedurally only.
 
-**On database_write counts:** `session.commit()` is the most common pattern (present in 15/16 repos, estimated 2,000+ of the 3,260 database_write matches). The scanner flags `commit()` as unguarded when no validation exists in the same function. In practice, validation often exists in a service layer, middleware, or ORM model — which the scanner cannot see (intra-procedural only). This means the true unguarded rate for database writes is likely lower than reported. Use `# checked:ok` to acknowledge commit() calls that are protected elsewhere.
+**On database_write counts:** `session.commit()` is the most common pattern (present in 15/16 repos, estimated 2,000+ of the 3,260 database_write matches). The scanner flags `commit()` as unguarded when no validation exists in the same function. In practice, validation often exists in a service layer, middleware, or ORM model — which the scanner
+cannot see (class methods and cross-package chains are not traced). This means the true
+unguarded rate for database writes is likely lower than reported. Use `# checked:ok` to acknowledge commit() calls that are protected elsewhere.
 
 ---
 

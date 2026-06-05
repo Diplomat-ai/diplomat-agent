@@ -78,6 +78,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Only show unguarded tools in the report",
     )
     parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Restrict report to MCP-exposed tools only (exposure != internal)",
+    )
+    parser.add_argument(
         "--fail-on-unguarded",
         action="store_true",
         help="Exit with code 1 if any unguarded tool is found (for CI)",
@@ -182,8 +187,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         scanned_path = str(file_path)
         from diplomat_agent.scanner.ast_scanner import scan_file
-        tools = scan_file(file_path)
-        file_stats = {"files_scanned": 1, "files_skipped": 0}
+        _parse_errs: list[str] = []
+        tools = scan_file(file_path, _parse_errors=_parse_errs)
+        file_stats = {
+            "files_scanned": 1,
+            "files_skipped": 0,
+            "files_unparsed": _parse_errs,
+            "dispatcher_files": [],
+        }
     elif args.diff_only:
         # --diff-only: scan only git-modified Python files
         scan_root = Path(args.path).resolve()
@@ -249,6 +260,22 @@ def main(argv: list[str] | None = None) -> int:
     apply_missing_hints(tools)
     apply_owasp(tools)
 
+    # --- Compute MCP summary BEFORE any filtering (always from full list) ---
+    _mcp_tools = [t for t in tools if t.exposure == "mcp_tool"]
+    if _mcp_tools:
+        mcp_summary: dict | None = {
+            "total": len(_mcp_tools),
+            "unguarded": sum(1 for t in _mcp_tools if t.verdict == "UNGUARDED"),
+            "partially_guarded": sum(1 for t in _mcp_tools if t.verdict == "PARTIALLY_GUARDED"),
+            "guarded": sum(1 for t in _mcp_tools if t.verdict in ("GUARDED", "LOW_RISK")),
+        }
+    else:
+        mcp_summary = None
+
+    # --- Filter if --mcp ---
+    if args.mcp:
+        tools = [t for t in tools if t.exposure != "internal"]
+
     # --- Filter if --unguarded-only ---
     if args.unguarded_only:
         tools = [t for t in tools if t.verdict == "UNGUARDED"]
@@ -279,13 +306,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.format == "terminal":
             if output_file:
                 from diplomat_agent.reporter.terminal import render_plain
-                _write_output(render_plain(result, scanned_path), output_file)
+                _write_output(render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats), output_file)
             else:
                 from diplomat_agent.reporter.terminal import print_report
                 print_report(
                     result,
                     scanned_path,
                     use_rich=not args.no_rich,
+                    mcp_summary=mcp_summary,
+                    file_stats=file_stats,
                 )
 
         elif args.format == "markdown":

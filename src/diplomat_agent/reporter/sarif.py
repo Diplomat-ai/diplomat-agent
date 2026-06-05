@@ -138,6 +138,8 @@ def _build_result(tool: Tool) -> dict:
         "message": {"text": msg},
         "locations": [location],
     }
+    if tool.exposure == "mcp_tool":
+        result["properties"] = {"exposure": "mcp_tool"}
     return result
 
 

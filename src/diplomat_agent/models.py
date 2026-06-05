@@ -43,6 +43,8 @@ class Tool:
     ignored: bool = False  # True when # diplomat:ok, # canary:ok, or # checked:ok is present
     ignore_reason: str = ""  # text after the marker, e.g. "validated at API layer"
     owasp_agentic: list[str] = field(default_factory=list)  # e.g. ["ASI-02", "ASI-03"]
+    exposure: str = "internal"   # "internal" | "mcp_tool"
+    exposure_evidence: str = ""  # decorator proving exposure, e.g. "@mcp.tool()"
 
 
 @dataclass
