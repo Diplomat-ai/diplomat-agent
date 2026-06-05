@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.5.0] — 2026-05-01
+
+### Added
+- **FIX A v1 — Intra-package inter-procedural tracing**: the scanner now
+  follows plain-name same-package function calls (depth-2, cycle-safe) and
+  propagates both side effects and guards from called helpers into their
+  callers. Evidence format: `"session.delete(id)  [via _purge() @ svc.py:12]"`.
+  Guard symmetry preserved: a helper that validates-then-writes causes its
+  callers to inherit `PARTIALLY_GUARDED` rather than `UNGUARDED`.
+  Class methods and cross-package calls are **not** resolved in v1 (FIX A v2).
+- **FIX B v1 — Programmatic MCP tool registration**: `mcp.add_tool(fn)` /
+  `app.add_tool(fn)` patterns are detected and the function is marked as
+  `exposure="mcp_tool"` even without a decorator.
+- **FIX C — psutil / os.kill destructive-process patterns**: `proc.kill()`,
+  `proc.terminate()`, `proc.suspend()`, `os.kill(pid, sig)` are now detected
+  as `destructive` side effects with risk-3 severity.
+- **ANTI-FP observability-helper exclusion**: calls whose name contains
+  log_, _log, audit_, track_, metric, trace_, telemetry, report_event, etc.
+  are never followed inter-procedurally, preventing fake side-effect injection
+  from fire-and-forget observability helpers.
+- **Pattern dispatch index** (performance): `SIDE_EFFECT_PATTERNS` is indexed
+  at import time by `attr_exact` value, reducing per-call pattern checks from
+  ~61 to ~2 for non-matching attribute calls.
+- **Path-key cache** (performance): `PackageIndex._path_key()` memoises
+  `os.path.normcase(str(path.resolve()))` per path string, eliminating
+  repeated `nt._getfinalpathname` syscalls on Windows.
+- **Module-resolve cache** (performance): `PackageIndex._resolve_module()`
+  memoises `(module, from_dir, level) → Path` to avoid repeated `exists()`
+  filesystem checks for the same import across files.
+
+### Changed
+- **`attr_exact: ["terminate"]` precision fix**: the pre-existing
+  `name_contains: ["terminate"]` pattern that caused `session.terminate_session()`
+  false positives has been replaced with a targeted `attr_exact: ["terminate"]`
+  pattern on psutil-like objects only.
+- **Dedup key for inter-proc side effects** now uses `(file, category, line)`
+  instead of `(category, line)` so that a side effect discovered both directly
+  and via an inter-proc path does not suppress the cross-file copy.
+- **Performance**: crewai (largest repo at 425 tools) scan time reduced from
+  ~113s (pre-optimisation) to ~38s. Full 16-repo corpus reduced from ~600s
+  to ~361s.
+
+### Fixed
+- **Windows short-path (`GUARNE~1`) regression**: `callee_file.relative_to(root)`
+  failed when `_lookup_def` returned a short-form Windows path. Fixed by
+  resolving `callee_file` and using `normcase` prefix comparison instead of
+  `relative_to`.
+
+### Baseline (16-repo corpus, v0.5.0)
+- Total findings: **T=6,529** (was T=5,878 in v0.4.x, +651 new findings)
+- Unguarded: **U=4,628** (was U=4,499)
+- Unguarded ratio: **70.9%** (was 76.5% — lower is better: new findings are
+  disproportionately guarded/partially-guarded thanks to FIX A guard propagation)
+
 ## [0.4.0] — 2026-04-14
 
 ### Added
