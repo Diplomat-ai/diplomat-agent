@@ -73,6 +73,8 @@ def _render_tool_entry(tool: Tool, buf: StringIO, include_confirmed: bool = Fals
     buf.write(f"  - function: {tool.name}\n")
     buf.write(f"    file: {tool.file}\n")
     buf.write(f"    line: {tool.line}\n")
+    if tool.exposure == "mcp_tool":
+        buf.write("    exposure: mcp_tool\n")
 
     # actions
     if tool.side_effects:

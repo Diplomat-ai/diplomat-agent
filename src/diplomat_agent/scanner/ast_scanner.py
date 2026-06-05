@@ -7,6 +7,7 @@ finds functions with side effects and their governance mechanisms.
 from __future__ import annotations
 
 import ast
+import sys
 import textwrap
 from pathlib import Path
 
@@ -16,10 +17,35 @@ from diplomat_agent.scanner.patterns import (
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
+    HELPER_CALL_EXCLUDE_PATTERNS,
+    MCP_DISPATCH_DECORATOR_ATTRS,
+    MCP_INSTANCE_NAMES,
+    MCP_REGISTRATION_ATTRS,
+    MCP_SERVER_IMPORTS,
+    MCP_TOOL_DECORATOR_ATTRS,
     ORCHESTRATOR_DECORATORS,
     READ_ONLY_PATTERNS,
+    READER_METHOD_PREFIXES,
     SIDE_EFFECT_PATTERNS,
 )
+
+# ---------------------------------------------------------------------------
+# Pattern dispatch index (module-level, built once at import time)
+# ---------------------------------------------------------------------------
+# For each SIDE_EFFECT_PATTERN that has 'attr_exact', we index it under each
+# of its attr values so visit_Call only needs to check patterns whose attr
+# could actually match — reducing per-Call pattern checks from ~30 to ~2.
+# Patterns without 'attr_exact' are always checked (stored in _ATTR_NONE_PATTERNS).
+_ATTR_EXACT_DISPATCH: dict[str, list[dict]] = {}
+_ATTR_NONE_PATTERNS: list[dict] = []
+for _p in SIDE_EFFECT_PATTERNS:
+    _m = _p.get("match", {})
+    if "attr_exact" in _m:
+        for _a in _m["attr_exact"]:
+            _ATTR_EXACT_DISPATCH.setdefault(_a.lower(), []).append(_p)
+    else:
+        _ATTR_NONE_PATTERNS.append(_p)
+del _p, _m, _a  # cleanup loop variables
 
 
 # ---------------------------------------------------------------------------
@@ -142,9 +168,22 @@ def _call_func_name(node: ast.Call) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _matches_pattern(call: ast.Call, match: dict, source_lines: list[str]) -> bool:
-    """Return True if an ast.Call node matches the given pattern match dict."""
-    full_name, obj_name, attr_name = _call_parts(call)
+def _matches_pattern(
+    call: ast.Call,
+    match: dict,
+    source_lines: list[str],
+    _full: str | None = None,
+    _obj: str | None = None,
+    _attr: str | None = None,
+) -> bool:
+    """Return True if an ast.Call node matches the given pattern match dict.
+
+    Accepts optional pre-computed (_full, _obj, _attr) from _call_parts to
+    avoid re-computing them when the caller already has the values.
+    """
+    if _full is None:
+        _full, _obj, _attr = _call_parts(call)
+    full_name, obj_name, attr_name = _full, _obj, _attr
 
     # func_contains: full dotted name must include one of the strings
     if "func_contains" in match:
@@ -205,7 +244,18 @@ def _matches_pattern(call: ast.Call, match: dict, source_lines: list[str]) -> bo
 
 
 def _is_read_only(call: ast.Call) -> bool:
-    """Return True if a call matches any read-only pattern."""
+    """Return True if a call is read-only.
+
+    A call is read-only when:
+    1. Its final attribute starts with a reader-method prefix (FIX 2), OR
+    2. It matches one of the explicit READ_ONLY_PATTERNS.
+
+    Reader-prefix check takes priority so that `client.get_post()` is never
+    flagged by the http_write pattern via obj_contains heuristics.
+    """
+    _, _, attr_name = _call_parts(call)
+    if attr_name and any(attr_name.startswith(p) for p in READER_METHOD_PREFIXES):
+        return True
     for pattern in READ_ONLY_PATTERNS:
         if _matches_pattern(call, pattern["match"], []):
             return True
@@ -395,8 +445,42 @@ class _SideEffectVisitor(ast.NodeVisitor):
         self._seen: set[tuple[str, int]] = set()  # dedup by (category, line)
 
     def visit_Call(self, node: ast.Call) -> None:
-        for pattern in SIDE_EFFECT_PATTERNS:
-            if _matches_pattern(call=node, match=pattern["match"], source_lines=self.source_lines):
+        # Pre-compute call parts ONCE; pass to _matches_pattern to avoid
+        # redundant _call_parts calls across the ~30 SIDE_EFFECT_PATTERNS.
+        full_name, obj_name, attr_name = _call_parts(node)
+        # FIX 2 — reader-method prefix guard: skip attribute calls whose method
+        # name starts with a read-only prefix (e.g. get_, list_, fetch_).
+        # Restricted to attribute calls (obj.method()) so that standalone
+        # function calls like call_llm() or get_llm_response() are never
+        # suppressed by this rule.
+        if obj_name and attr_name and any(
+            attr_name.startswith(p) for p in READER_METHOD_PREFIXES
+        ):
+            self.generic_visit(node)
+            return
+        # Dispatch: only check patterns where attr_exact matches (or no
+        # attr_exact constraint).  For most Call nodes with a non-matching
+        # attr, _ATTR_EXACT_DISPATCH.get() returns [], so we only iterate
+        # the small _ATTR_NONE_PATTERNS list — a ~15× reduction in work.
+        candidates: list[dict]
+        if attr_name:
+            exact_matches = _ATTR_EXACT_DISPATCH.get(attr_name, ())
+            if exact_matches or _ATTR_NONE_PATTERNS:
+                candidates = list(_ATTR_NONE_PATTERNS) + list(exact_matches)
+            else:
+                self.generic_visit(node)
+                return
+        else:
+            candidates = _ATTR_NONE_PATTERNS
+        for pattern in candidates:
+            if _matches_pattern(
+                call=node,
+                match=pattern["match"],
+                source_lines=self.source_lines,
+                _full=full_name,
+                _obj=obj_name,
+                _attr=attr_name,
+            ):
                 key = (pattern["category"], node.lineno)
                 if key not in self._seen:
                     self._seen.add(key)
@@ -431,6 +515,223 @@ def _collect_imports(tree: ast.Module) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# FIX A v1 (v0.5.0) — Inter-procedural side-effect / guard resolution
+# ---------------------------------------------------------------------------
+# Periphery v1 (verrouillé):
+#   - Resolves ONLY same-package top-level functions (PackageIndex._defs only
+#     indexes top-level FunctionDef / AsyncFunctionDef). Class methods are NOT
+#     resolved in v1 — that is FIX A v2 (separate workstream).
+#   - Resolves ONLY calls whose return value is used (Assign / Return / nested
+#     in expression). Statement-only `helper(x)` lines are NOT followed —
+#     these are typical fire-and-forget observability calls.
+#   - Calls whose name matches HELPER_CALL_EXCLUDE_PATTERNS are NEVER followed
+#     even if the return value is used.
+#   - Helper guards (decorator + body) are propagated alongside side effects
+#     (mandatory symmetry — a helper that validates-then-writes must NOT be
+#     reported as UNGUARDED on its caller).
+#   - Bounded depth (default 2, hard cap 3), cycle protection via visited set,
+#     memoization via PackageIndex._effects_cache.
+
+_DEFAULT_INTERPROC_DEPTH: int = 2
+_HARD_INTERPROC_DEPTH_CAP: int = 3
+
+
+def _is_excluded_helper_name(name: str) -> bool:
+    """Return True if a callee name matches an observability-helper exclusion pattern.
+
+    Match is case-insensitive substring. Used by FIX A v1 to refuse to follow
+    into logging / audit / metrics / tracing helpers that would inject fake
+    side-effects into otherwise read-only tools.
+    """
+    if not name:
+        return False
+    low = name.lower()
+    for pattern in HELPER_CALL_EXCLUDE_PATTERNS:
+        if pattern.lower() in low:
+            return True
+    return False
+
+
+class _EligibleCallVisitor(ast.NodeVisitor):
+    """Collect plain-name Call nodes whose return value is used.
+
+    Only collects calls whose function is a bare ``Name`` node (i.e.
+    ``helper(x)``, ``_purge(y)``). Attribute calls (``obj.method()``)
+    are intentionally skipped: in FIX A v1 (same-module top-level only)
+    they can never resolve to a local top-level def and generating a
+    resolution attempt for every ``result.strip()`` / ``path.resolve()``
+    was the main source of scan slowdown on large repos (O(N*M) lookups).
+
+    A statement-only ``Expr(Call(...))`` is REJECTED (typical fire-and-forget
+    observability pattern). Calls in argument lists of a statement-only call
+    are still collected because their results are consumed by the outer call.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[ast.Call] = []
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        # Skip the OUTER call directly wrapped by Expr (statement-only),
+        # but descend into its argument expressions so nested calls whose
+        # results feed the outer call are still considered.
+        if isinstance(node.value, ast.Call):
+            for arg in node.value.args:
+                self.visit(arg)
+            for kw in node.value.keywords:
+                self.visit(kw.value)
+            return
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        # v1: only follow plain-name calls — skip attribute calls entirely.
+        if isinstance(node.func, ast.Name):
+            self.calls.append(node)
+        # Always recurse into arguments so nested plain-name calls are found.
+        self.generic_visit(node)
+
+
+def _resolve_call_effects(
+    call: ast.Call,
+    from_file: str,
+    package_index: "PackageIndex | None",
+    depth: int,
+    max_depth: int,
+    visited: set[tuple[str, str]],
+    source_lines_cache: dict[str, list[str]],
+) -> tuple[list[SideEffect], list[Guard]]:
+    """Resolve a Call → return (side_effects, guards) collected from callee body.
+
+    See module-level FIX A v1 docstring for the verrouillé peripheral. Returns
+    empty lists when:
+      - depth >= max_depth
+      - callee is unresolvable, or out of package root
+      - cycle detected (visited)
+      - callee name matches HELPER_CALL_EXCLUDE_PATTERNS
+    """
+    if package_index is None:
+        return [], []
+    if depth >= max_depth:
+        return [], []
+
+    # Determine the callee name we will resolve. v1: plain Name calls only.
+    # Attribute calls (obj.method()) are never resolvable to same-module
+    # top-level defs — skip them early for correctness and performance.
+    full_name, obj_name, attr_name = _call_parts(call)
+    if obj_name:
+        return [], []
+
+    callee_name = full_name  # plain Name call: full_name == attr_name == func.id
+    if not callee_name:
+        return [], []
+
+    # ANTI-FP: observability-helper exclusion (applied BEFORE _lookup_def).
+    if _is_excluded_helper_name(callee_name):
+        return [], []
+
+    # Resolve via PackageIndex (top-level functions only, by design).
+    callee_def, callee_file = package_index._lookup_def(
+        callee_name, Path(from_file)
+    )
+    if callee_def is None:
+        return [], []
+
+    # Stop at stdlib / third-party (anything outside the package root).
+    # Resolve callee_file to normalise Windows short-paths (GUARNE~1 → guarnelli)
+    # before comparing to package_index.root (which is always the long-path form).
+    import os as _os
+    try:
+        callee_resolved = callee_file.resolve()
+    except (OSError, ValueError):
+        callee_resolved = callee_file
+    callee_norm = _os.path.normcase(str(callee_resolved))
+    root_norm = _os.path.normcase(str(package_index.root))
+    if not callee_norm.startswith(root_norm):
+        return [], []
+
+    callee_path_str = str(callee_file)
+    visit_key = (callee_path_str, callee_def.name)
+
+    # Cycle protection.
+    if visit_key in visited:
+        return [], []
+
+    # Memoization (PackageIndex-scoped cache).
+    cache = getattr(package_index, "_effects_cache", None)
+    if cache is not None and visit_key in cache:
+        return cache[visit_key]
+
+    # Read source lines for the callee file (cached per-scan).
+    if callee_path_str not in source_lines_cache:
+        try:
+            text = callee_file.read_text(encoding="utf-8-sig", errors="replace")
+            source_lines_cache[callee_path_str] = text.splitlines()
+        except (OSError, UnicodeDecodeError):
+            return [], []
+    callee_lines = source_lines_cache[callee_path_str]
+
+    # --- Intra-procedural side effects + body guards of the callee. ---
+    se_visitor = _SideEffectVisitor(callee_lines, callee_path_str)
+    for stmt in callee_def.body:
+        se_visitor.visit(stmt)
+    callee_side_effects: list[SideEffect] = list(se_visitor.side_effects)
+
+    g_visitor = _GuardVisitor(callee_lines, set())
+    g_visitor.visit(callee_def)
+    callee_guards: list[Guard] = list(g_visitor.guards)
+
+    # Decorator guards on the callee (symmetric: a helper decorated with
+    # @auth_required still protects its caller's tool).
+    callee_dec_guards = _detect_decorator_guards(
+        callee_def.decorator_list,
+        callee_lines,
+        from_file=callee_file,
+        package_index=package_index,
+    )
+    callee_guards.extend(callee_dec_guards)
+
+    # Augment side-effect evidence with [via callee_name() @ file:line].
+    try:
+        rel = str(callee_file.relative_to(package_index.root))
+    except ValueError:
+        rel = callee_file.name
+    via_label = f"[via {callee_def.name}() @ {rel}:{callee_def.lineno}]"
+    callee_side_effects = [
+        SideEffect(
+            category=se.category,
+            evidence=f"{se.evidence}  {via_label}",
+            line=se.line,
+            file=se.file,
+            type=se.type,
+        )
+        for se in callee_side_effects
+    ]
+
+    # --- Recursive descent into eligible sub-calls of the callee. ---
+    new_visited = visited | {visit_key}
+    sub_visitor = _EligibleCallVisitor()
+    for stmt in callee_def.body:
+        sub_visitor.visit(stmt)
+    for sub_call in sub_visitor.calls:
+        sub_se, sub_g = _resolve_call_effects(
+            sub_call,
+            callee_path_str,
+            package_index,
+            depth + 1,
+            max_depth,
+            new_visited,
+            source_lines_cache,
+        )
+        callee_side_effects.extend(sub_se)
+        callee_guards.extend(sub_g)
+
+    # Memoize.
+    if cache is not None:
+        cache[visit_key] = (callee_side_effects, callee_guards)
+
+    return callee_side_effects, callee_guards
+
+
+# ---------------------------------------------------------------------------
 # Function analysis
 # ---------------------------------------------------------------------------
 
@@ -441,21 +742,60 @@ def _analyze_function(
     file_path: str,
     module_imports: set[str],
     package_index: "PackageIndex | None" = None,
+    module_is_mcp: bool = False,
+    programmatic_mcp_tools: "set[str] | None" = None,
+    interproc_source_cache: "dict[str, list[str]] | None" = None,
 ) -> Tool | None:
     """Analyze a single function/method and return a Tool if it has side effects."""
-    # --- Collect side effects (body only, skip decorators) ---
+    # --- Collect intra-procedural side effects (body only, skip decorators) ---
     se_visitor = _SideEffectVisitor(source_lines, file_path)
     for stmt in func_node.body:
         se_visitor.visit(stmt)
-    side_effects = se_visitor.side_effects
+    side_effects = list(se_visitor.side_effects)
+
+    # --- FIX A v1 (v0.5.0): inter-procedural side-effect / guard tracing ---
+    # Walk eligible sub-calls of the function body (return-value-used only)
+    # and merge effects + guards from same-package top-level helpers.
+    interproc_guards: list[Guard] = []
+    if package_index is not None:
+        if interproc_source_cache is None:
+            interproc_source_cache = {}
+        interproc_source_cache[file_path] = source_lines
+        eligible = _EligibleCallVisitor()
+        for stmt in func_node.body:
+            eligible.visit(stmt)
+        for sub_call in eligible.calls:
+            extra_se, extra_g = _resolve_call_effects(
+                sub_call,
+                file_path,
+                package_index,
+                depth=0,
+                max_depth=_DEFAULT_INTERPROC_DEPTH,
+                visited=set(),
+                source_lines_cache=interproc_source_cache,
+            )
+            if extra_se:
+                side_effects.extend(extra_se)
+            if extra_g:
+                interproc_guards.extend(extra_g)
+
+    # FIX A v1 dedup — keyed on (file, category, line) to support multi-file
+    # tracing without artificial double-counting.
+    if side_effects:
+        _seen_se: set[tuple[str, str, int]] = set()
+        deduped: list[SideEffect] = []
+        for se in side_effects:
+            key = (se.file, se.category, se.line)
+            if key not in _seen_se:
+                _seen_se.add(key)
+                deduped.append(se)
+        side_effects = deduped
 
     if not side_effects:
         return None
 
     # --- Filter out pure read-only functions ---
     # A function is read-only only if ALL its detected patterns are read-only.
-    # We re-check: if side_effects contains only patterns that were also matched
-    # by read-only patterns, skip. We do this by checking call nodes directly.
     write_effects = [se for se in side_effects if se.category != "read"]
     if not write_effects:
         return None
@@ -491,11 +831,12 @@ def _analyze_function(
     guard_visitor.visit(func_node)
     body_guards = guard_visitor.guards
 
-    # Combine, dedup by (type, line)
+    # Combine, dedup by (type, line, evidence) — evidence disambiguates
+    # cross-file helper guards that share a line number with caller guards.
     all_guards: list[Guard] = []
-    seen_guards: set[tuple[str, int]] = set()
-    for g in dec_guards + imp_guards + dep_guards + body_guards:
-        key = (g.type, g.line)
+    seen_guards: set[tuple[str, int, str]] = set()
+    for g in dec_guards + imp_guards + dep_guards + body_guards + interproc_guards:
+        key = (g.type, g.line, g.evidence)
         if key not in seen_guards:
             seen_guards.add(key)
             all_guards.append(g)
@@ -514,6 +855,34 @@ def _analyze_function(
                 break
         if auto_retried:
             break
+
+    # --- Detect MCP tool exposure ---
+    # Heuristic: if the module imports an MCP server package (module_is_mcp gate)
+    # and the function has an @<instance>.tool decorator, it is an MCP-exposed tool.
+    # We match on the final attribute name only (not the instance variable name),
+    # which covers @mcp.tool, @app.tool, @server.tool regardless of variable name.
+    # NOTE: bare @tool (from fastmcp import tool) is NOT matched in v1 — the
+    # attribute-based pattern covers >95% of real-world cases with lower FP risk.
+    # NOTE: a @mcp.tool with no detected side effects returns None from this
+    # function, so only tools with real-world side effects appear in the output.
+    # This is intentional: read-only MCP tools have no concern; the denominator
+    # for MCP benchmarks is "MCP tools with real-world side effects detected".
+    exposure = "internal"
+    exposure_evidence = ""
+    if module_is_mcp:
+        for dec in func_node.decorator_list:
+            dec_unparsed = ast.unparse(dec)
+            dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
+            if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
+                exposure = "mcp_tool"
+                exposure_evidence = "@" + dec_unparsed[:80]
+                break
+        # FIX B v1 (v0.5.0) — programmatic registration via mcp.add_tool(fn)
+        # promotes the referenced function to mcp_tool exposure.
+        if exposure == "internal" and programmatic_mcp_tools:
+            if func_node.name in programmatic_mcp_tools:
+                exposure = "mcp_tool"
+                exposure_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
 
     # --- Detect # diplomat:ok / # canary:ok / # checked:ok inline comments ---
     ignored = False
@@ -571,6 +940,8 @@ def _analyze_function(
         auto_retry_decorator=auto_retry_decorator,
         ignored=ignored,
         ignore_reason=ignore_reason,
+        exposure=exposure,
+        exposure_evidence=exposure_evidence,
     )
 
 
@@ -579,18 +950,129 @@ def _analyze_function(
 # ---------------------------------------------------------------------------
 
 
-def scan_file(file_path: Path, package_index: "PackageIndex | None" = None) -> list[Tool]:
-    """Parse a single Python file and return all tools found."""
-    source = file_path.read_text(encoding="utf-8", errors="replace")
+def scan_file(
+    file_path: Path,
+    package_index: "PackageIndex | None" = None,
+    _parse_errors: "list[str] | None" = None,
+    _dispatcher_files: "list[str] | None" = None,
+) -> list[Tool]:
+    """Parse a single Python file and return all tools found.
+
+    Args:
+        file_path: Path to the Python file to scan.
+        package_index: Optional package index for interprocedural analysis.
+        _parse_errors: If provided, any file that fails to parse (SyntaxError)
+            will have its path appended here. Internal use by scan_directory.
+        _dispatcher_files: If provided, any file containing a low-level
+            @*.call_tool dispatcher will have its path appended here.
+    """
+    # FIX 1 — use utf-8-sig to silently strip BOM without error
+    source = file_path.read_text(encoding="utf-8-sig", errors="replace")
     source_lines = source.splitlines()
 
     try:
         tree = ast.parse(source, filename=str(file_path))
     except SyntaxError:
+        print(
+            f"\u26a0 could not parse {file_path} (SyntaxError) \u2014 "
+            f"skipped, NOT counted as clean",
+            file=sys.stderr,
+        )
+        if _parse_errors is not None:
+            _parse_errors.append(str(file_path))
         return []
 
     module_imports = _collect_imports(tree)
+
+    # Detect MCP server context via import-based gate
+    module_is_mcp = bool(module_imports & {s.lower() for s in MCP_SERVER_IMPORTS})
+
+    # FIX 3 — extended gate: detect @<name>.tool() in files that import an MCP
+    # instance from a local/shared module (e.g. `from .server import mcp`).
+    # Without this, files like `src/tools/redis_tools.py` that do
+    # `from src.common.server import mcp` are not recognised as MCP modules.
+    if not module_is_mcp:
+        imported_mcp_names: set[str] = set()
+        for _node in ast.walk(tree):
+            if isinstance(_node, ast.ImportFrom):
+                for _alias in _node.names:
+                    _sym = (_alias.asname if _alias.asname else _alias.name).lower()
+                    if _sym in MCP_INSTANCE_NAMES:
+                        imported_mcp_names.add(_sym)
+        if imported_mcp_names:
+            for _node in ast.walk(tree):
+                if module_is_mcp:
+                    break
+                if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for _dec in _node.decorator_list:
+                        _dec_parts = ast.unparse(_dec).split("(")[0].rsplit(".", 1)
+                        if (
+                            len(_dec_parts) == 2
+                            and _dec_parts[0].lower() in imported_mcp_names
+                            and _dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS
+                        ):
+                            module_is_mcp = True
+                            break
+
+    # Warn once per file when a low-level @.call_tool dispatcher is present.
+    # Per-tool resolution for this pattern is not supported in v1; FastMCP
+    # @mcp.tool is fully supported.
+    if module_is_mcp:
+        _found_dispatch = False
+        for _node in ast.walk(tree):
+            if _found_dispatch:
+                break
+            if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for _dec in _node.decorator_list:
+                    _dec_parts = ast.unparse(_dec).split("(")[0].rsplit(".", 1)
+                    if len(_dec_parts) == 2 and _dec_parts[1] in MCP_DISPATCH_DECORATOR_ATTRS:
+                        print(
+                            f"\u26a0 low-level MCP dispatcher detected (@server.call_tool) in "
+                            f"{file_path} \u2014 per-tool analysis not supported in v1; "
+                            f"FastMCP @mcp.tool is fully supported.",
+                            file=sys.stderr,
+                        )
+                        # FIX 4 — track dispatcher files for stats / reporting
+                        if _dispatcher_files is not None:
+                            _dispatcher_files.append(str(file_path))
+                        _found_dispatch = True
+                        break
+
+    # FIX B v1 (v0.5.0) — collect programmatically-registered MCP tool names.
+    # Recognises mcp.add_tool(fn), server.add_tool(fn), app.tool(fn) when the
+    # receiver is in MCP_INSTANCE_NAMES AND module_is_mcp gate is True. The
+    # first positional arg must be a Name or Attribute referring to a local
+    # top-level function. Resolved names go into programmatic_mcp_tools so
+    # _analyze_function can promote those defs to exposure="mcp_tool".
+    programmatic_mcp_tools: set[str] = set()
+    if module_is_mcp:
+        for _node in ast.walk(tree):
+            if not isinstance(_node, ast.Call):
+                continue
+            _func = _node.func
+            if not isinstance(_func, ast.Attribute):
+                continue
+            if _func.attr not in MCP_REGISTRATION_ATTRS:
+                continue
+            # Receiver must be one of MCP_INSTANCE_NAMES (mcp / server / app).
+            _recv = _func.value
+            if not isinstance(_recv, ast.Name):
+                continue
+            if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                continue
+            if not _node.args:
+                continue
+            _arg0 = _node.args[0]
+            if isinstance(_arg0, ast.Name):
+                programmatic_mcp_tools.add(_arg0.id)
+            elif isinstance(_arg0, ast.Attribute):
+                # Best-effort: foo.bar → bar (last attribute name)
+                programmatic_mcp_tools.add(_arg0.attr)
+
     tools: list[Tool] = []
+
+    # Shared inter-procedural source-line cache for this file scan.
+    _interproc_cache: dict[str, list[str]] = {}
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -600,6 +1082,9 @@ def scan_file(file_path: Path, package_index: "PackageIndex | None" = None) -> l
                 file_path=str(file_path),
                 module_imports=module_imports,
                 package_index=package_index,
+                module_is_mcp=module_is_mcp,
+                programmatic_mcp_tools=programmatic_mcp_tools,
+                interproc_source_cache=_interproc_cache,
             )
             if tool is not None:
                 tools.append(tool)
@@ -639,29 +1124,47 @@ def scan_directory(root: Path) -> list[Tool]:
     alembic/, test files, and similar.
 
     After calling this function, the module-level ``last_scan_stats`` dict
-    is populated with ``files_scanned`` and ``files_skipped`` counts.
+    is populated with ``files_scanned``, ``files_skipped``,
+    ``files_unparsed``, and ``dispatcher_files`` entries.
     """
     global last_scan_stats
     tools: list[Tool] = []
     files_scanned = 0
     files_skipped = 0
+    _parse_errors: list[str] = []
+    _dispatcher_files: list[str] = []
 
     package_index = PackageIndex(root)
 
     for py_file, included in _iter_all_python_files(root):
         if included:
-            file_tools = scan_file(py_file, package_index=package_index)
+            file_tools = scan_file(
+                py_file,
+                package_index=package_index,
+                _parse_errors=_parse_errors,
+                _dispatcher_files=_dispatcher_files,
+            )
             tools.extend(file_tools)
             files_scanned += 1
         else:
             files_skipped += 1
 
-    last_scan_stats = {"files_scanned": files_scanned, "files_skipped": files_skipped}
+    last_scan_stats = {
+        "files_scanned": files_scanned,
+        "files_skipped": files_skipped,
+        "files_unparsed": _parse_errors,
+        "dispatcher_files": _dispatcher_files,
+    }
     return tools
 
 
 # Module-level stats populated by the last scan_directory() call
-last_scan_stats: dict[str, int] = {"files_scanned": 0, "files_skipped": 0}
+last_scan_stats: dict = {
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "files_unparsed": [],
+    "dispatcher_files": [],
+}
 
 
 def _iter_python_files(root: Path):

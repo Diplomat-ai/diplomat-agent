@@ -53,6 +53,16 @@ def render_json(
         summary["files_scanned"] = file_stats.get("files_scanned", 0)
         summary["files_changed"] = file_stats.get("files_changed", 0)
 
+    if file_stats:
+        unparsed = file_stats.get("files_unparsed", [])
+        if unparsed:
+            summary["files_unparsed_count"] = len(unparsed)
+            summary["files_unparsed"] = unparsed
+        dispatchers = file_stats.get("dispatcher_files", [])
+        if dispatchers:
+            summary["dispatcher_files_count"] = len(dispatchers)
+            summary["dispatcher_files"] = dispatchers
+
     data: dict = {
         "version": __version__,
         "scanned_path": scanned_path,
