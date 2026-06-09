@@ -89,6 +89,21 @@ _PARTIALLY_GUARDED_RULE: dict = {
     "helpUri": "https://github.com/Diplomat-ai/diplomat-agent#what-counts-as-a-tool-call",
 }
 
+_CONTRACT_VIOLATION_RULE: dict = {
+    "id": "DA010",
+    "name": "ContractViolation",
+    "shortDescription": {"text": "MCP tool annotation contradicts detected behaviour"},
+    "fullDescription": {
+        "text": (
+            "The tool is annotated (e.g. readOnlyHint=True or destructiveHint=False) "
+            "but static analysis detected side effects that contradict the annotation. "
+            "The annotation cannot be trusted as a safety signal."
+        )
+    },
+    "defaultConfiguration": {"level": "error"},
+    "helpUri": "https://github.com/Diplomat-ai/diplomat-agent#contract-violation",
+}
+
 
 def _rule_id(tool: Tool) -> str:
     """Map a tool to a stable DA rule ID based on its category and verdict."""
@@ -104,9 +119,10 @@ def _rule_id(tool: Tool) -> str:
 
 
 def _build_rules(tools: list[Tool]) -> list[dict]:
-    """Return all 9 rules statically — rules declare tool capability, not scan results."""
+    """Return all 10 rules statically — rules declare tool capability, not scan results."""
     rules = [dict(rule) for rule in _CATEGORY_RULES.values()]
     rules.append(dict(_PARTIALLY_GUARDED_RULE))
+    rules.append(dict(_CONTRACT_VIOLATION_RULE))
     return sorted(rules, key=lambda r: r["id"])
 
 
@@ -138,14 +154,45 @@ def _build_result(tool: Tool) -> dict:
         "message": {"text": msg},
         "locations": [location],
     }
+    props: dict = {}
     if tool.exposure == "mcp_tool":
-        result["properties"] = {"exposure": "mcp_tool"}
+        props["exposure"] = "mcp_tool"
+    if tool.contract_violation != "NONE":
+        props["contractViolation"] = tool.contract_violation
+    if props:
+        result["properties"] = props
+    # Emit an additional DA010 result when a contract violation is present
     return result
+
+
+def _build_contract_violation_result(tool: Tool) -> "dict | None":
+    """Return a DA010 SARIF result if the tool has a contract violation, else None."""
+    if tool.contract_violation == "NONE":
+        return None
+    cv_msg = tool.contract_violation.replace("_", " ").lower()
+    return {
+        "ruleId": "DA010",
+        "level": "error",
+        "message": {"text": f"Contract violation: {cv_msg} in '{tool.name}'"},
+        "locations": [{
+            "physicalLocation": {
+                "artifactLocation": {"uri": tool.file},
+                "region": {"startLine": tool.line},
+            }
+        }],
+    }
 
 
 def generate_sarif(result: ScanResult, scanned_path: str = ".") -> dict:
     """Build the complete SARIF 2.1.0 log object."""
     relevant = [t for t in result.tools if t.verdict not in ("LOW_RISK", "GUARDED")]
+
+    sarif_results = [_build_result(t) for t in relevant]
+    # Append DA010 contract-violation results (one per violating tool)
+    for t in result.tools:
+        cv_result = _build_contract_violation_result(t)
+        if cv_result is not None:
+            sarif_results.append(cv_result)
 
     sarif: dict = {
         "$schema": _SARIF_SCHEMA,
@@ -160,7 +207,7 @@ def generate_sarif(result: ScanResult, scanned_path: str = ".") -> dict:
                         "rules": _build_rules(relevant),
                     }
                 },
-                "results": [_build_result(t) for t in relevant],
+                "results": sarif_results,
             }
         ],
     }
