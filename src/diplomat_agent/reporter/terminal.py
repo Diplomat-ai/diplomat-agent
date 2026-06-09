@@ -89,6 +89,10 @@ def _plain_tool_block(tool: Tool) -> str:
 
     verdict_label = _VERDICT_LABELS.get(tool.verdict, tool.verdict)
     lines.append(f"  Governance: {verdict_label}")
+    # Contract violation badge — printed after governance line
+    if tool.contract_violation != "NONE":
+        cv = tool.contract_violation.replace("_", " ").title()
+        lines.append(f"  ⚠ CONTRACT VIOLATION — {cv}")
     return "\n".join(lines)
 
 
@@ -387,6 +391,10 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
         console.print(f"  Governance: [bold yellow]{verdict_label}[/bold yellow]")
     else:
         console.print(f"  Governance: [bold green]{verdict_label}[/bold green]")
+    # Contract violation badge
+    if tool.contract_violation != "NONE":
+        cv = tool.contract_violation.replace("_", " ").title()
+        console.print(f"  [bold red]⚠ CONTRACT VIOLATION — {cv}[/bold red]")
 
 
 # ---------------------------------------------------------------------------

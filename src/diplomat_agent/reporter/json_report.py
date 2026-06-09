@@ -28,9 +28,16 @@ def _finding(tool: Tool) -> dict:
         "missing": list(tool.missing_hints),
         "verdict": tool.verdict,
         "acknowledged": tool.ignored,
+        # GATE 3 — contract violation (orthogonal to verdict)
+        "contract_violation": tool.contract_violation,
     }
     if tool.ignored and tool.ignore_reason:
         finding["acknowledged_reason"] = tool.ignore_reason
+    # Include annotation hints when present (additive, omit when None to keep output compact)
+    if tool.readonly_hint is not None:
+        finding["readonly_hint"] = tool.readonly_hint
+    if tool.destructive_hint is not None:
+        finding["destructive_hint"] = tool.destructive_hint
     return finding
 
 

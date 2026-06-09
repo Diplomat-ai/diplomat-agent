@@ -794,3 +794,161 @@ class TestRealWorldPatterns:
     def test_mongo_update_one_detected(self):
         assert "update_document_status" in self.by_name
         assert any(se.category == "database_write" for se in self.by_name["update_document_status"].side_effects)
+
+
+class TestAsyncSubprocessDetection:
+    """GATE 2 / FN1 — asyncio.create_subprocess_exec/shell must be detected as destructive."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "fn_async_subprocess.py"
+        cls.tools = {t.name: t for t in scan_file(fixture)}
+
+    def test_async_subprocess_detected(self):
+        """asyncio.create_subprocess_exec must produce a destructive side effect."""
+        assert "execute_command" in self.tools, (
+            f"execute_command not found; tools={list(self.tools)}"
+        )
+        tool = self.tools["execute_command"]
+        cats = {se.category for se in tool.side_effects}
+        assert "destructive" in cats, f"destructive not in {cats}"
+
+    def test_async_subprocess_evidence_contains_call(self):
+        """Evidence string must reference create_subprocess_exec."""
+        tool = self.tools["execute_command"]
+        destructive = [se for se in tool.side_effects if se.category == "destructive"]
+        assert destructive
+        assert any("create_subprocess_exec" in se.evidence for se in destructive)
+
+
+class TestAsyncSubprocessInterproc:
+    """GATE 2 / FN1 — plain-Name interproc propagation of async subprocess."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "fn_async_subprocess_interproc.py"
+        # Need package_index for interproc resolution
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        pkg = PackageIndex(fixture.parent)
+        cls.tools = {t.name: t for t in scan_file(fixture, package_index=pkg)}
+
+    def test_tool_entry_has_destructive_effect(self):
+        """tool_entry must carry the destructive effect propagated from _run."""
+        assert "tool_entry" in self.tools, f"tool_entry not found; tools={list(self.tools)}"
+        tool = self.tools["tool_entry"]
+        cats = {se.category for se in tool.side_effects}
+        assert "destructive" in cats, (
+            f"destructive not propagated to tool_entry; effects={tool.side_effects}"
+        )
+
+    def test_tool_entry_evidence_has_via(self):
+        """Propagated evidence must contain '[via _run()' chain annotation."""
+        tool = self.tools["tool_entry"]
+        destructive = [se for se in tool.side_effects if se.category == "destructive"]
+        assert destructive
+        # At least one evidence should reference the via chain
+        assert any("[via _run()" in se.evidence for se in destructive), (
+            f"No via annotation found in: {[se.evidence for se in destructive]}"
+        )
+
+
+class TestContractViolation:
+    """GATE 3 — readOnlyHint=True + write side effects → contract_violation flag."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "contract_readonly_violation.py"
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        pkg = PackageIndex(fixture.parent)
+        raw_tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(raw_tools)
+        cls.tools = {t.name: t for t in raw_tools}
+
+    def test_contract_violation_readonly_write(self):
+        """lookup: readOnlyHint=True but has INSERT → DECLARED_READONLY_BUT_WRITES."""
+        assert "lookup" in self.tools, f"lookup not found; tools={list(self.tools)}"
+        tool = self.tools["lookup"]
+        assert tool.contract_violation == "DECLARED_READONLY_BUT_WRITES", (
+            f"Expected DECLARED_READONLY_BUT_WRITES, got {tool.contract_violation!r}"
+        )
+        # Verdict must be unchanged — contract_violation is orthogonal
+        assert tool.verdict == "UNGUARDED", (
+            f"Expected UNGUARDED, got {tool.verdict!r} — contract_violation must not change verdict"
+        )
+
+    def test_readonly_no_write_is_clean(self):
+        """safe_read: readOnlyHint=True with no writes → contract_violation NONE."""
+        # safe_read has no write side effects → scan_file returns None → not in tools dict
+        assert "safe_read" not in self.tools, (
+            "safe_read has no writes; scan_file should not return it as a Tool"
+        )
+
+
+class TestGate4McpClient:
+    """GATE 4 — session.call_tool() in MCP client module → exposure mcp_client, verdict OPAQUE."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "external_mcp_client.py"
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        pkg = PackageIndex(fixture.parent)
+        raw_tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(raw_tools)
+        cls.tools = {t.name: t for t in raw_tools}
+        cls.summary = build_summary(raw_tools)
+
+    def test_external_mcp_call_is_opaque(self):
+        """call_remote_tool: session.call_tool() → exposure mcp_client + verdict OPAQUE."""
+        assert "call_remote_tool" in self.tools, (
+            f"call_remote_tool not found; tools={list(self.tools)}"
+        )
+        tool = self.tools["call_remote_tool"]
+        assert tool.exposure == "mcp_client", (
+            f"Expected exposure='mcp_client', got {tool.exposure!r}"
+        )
+        assert tool.verdict == "OPAQUE", (
+            f"Expected verdict='OPAQUE', got {tool.verdict!r}"
+        )
+
+    def test_client_receiver_is_opaque(self):
+        """call_remote_named: client.call_tool() receiver → also OPAQUE."""
+        assert "call_remote_named" in self.tools, (
+            f"call_remote_named not found; tools={list(self.tools)}"
+        )
+        tool = self.tools["call_remote_named"]
+        assert tool.exposure == "mcp_client", (
+            f"Expected exposure='mcp_client', got {tool.exposure!r}"
+        )
+        assert tool.verdict == "OPAQUE", (
+            f"Expected verdict='OPAQUE', got {tool.verdict!r}"
+        )
+
+    def test_innocent_helper_excluded(self):
+        """innocent_helper: no call_tool → must NOT appear in scan output."""
+        assert "innocent_helper" not in self.tools, (
+            "innocent_helper has no call_tool; scan_file must not return it"
+        )
+
+    def test_opaque_excluded_from_denominator(self):
+        """build_summary: opaque key present; OPAQUE excluded from verdict denominator."""
+        assert "opaque" in self.summary, (
+            f"build_summary missing 'opaque' key; keys={list(self.summary)}"
+        )
+        assert self.summary["opaque"] == 2, (
+            f"Expected 2 opaque tools (call_remote_tool + call_remote_named), "
+            f"got {self.summary['opaque']}"
+        )
+        # OPAQUE tools must not inflate unguarded/partial/guarded/low_risk
+        denom = (
+            self.summary["unguarded"]
+            + self.summary["partially_guarded"]
+            + self.summary["guarded"]
+            + self.summary["low_risk"]
+        )
+        assert denom == 0, (
+            f"Denominator must be 0 (only OPAQUE tools in fixture), got {denom}"
+        )
+        # total_tools includes OPAQUE so counts stay balanced
+        assert self.summary["total_tools"] == 2, (
+            f"Expected total_tools=2, got {self.summary['total_tools']}"
+        )
