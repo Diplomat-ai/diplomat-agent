@@ -66,6 +66,25 @@ MCP_DISPATCH_DECORATOR_ATTRS: list[str] = ["call_tool"]
 # module even if the originating module is not in MCP_SERVER_IMPORTS.
 MCP_INSTANCE_NAMES: frozenset[str] = frozenset(["mcp", "server", "app"])
 
+# ---------------------------------------------------------------------------
+# MCP client detection patterns (GATE 4)
+# ---------------------------------------------------------------------------
+# Imports that identify a module as an MCP *client* (consumer of an MCP server,
+# not a server itself).
+# Gate: module_is_mcp_client = bool(module_imports & MCP_CLIENT_IMPORTS) and not module_is_mcp
+MCP_CLIENT_IMPORTS: frozenset[str] = frozenset({
+    "mcp",
+    "mcp.client",
+    "mcp.client.streamable_http",
+    "mcp.client.stdio",
+    "mcp.client.sse",
+})
+
+# Session-like receiver names for MCP client call_tool call-site detection.
+# A Call node with attr="call_tool" on one of these receivers inside a function
+# body (NOT a decorator) marks that function as exposure="mcp_client" / OPAQUE.
+MCP_CLIENT_SESSION_NAMES: frozenset[str] = frozenset({"session", "client", "_session"})
+
 # FIX B v1 (v0.5.0) — programmatic tool registration call attributes.
 # Detects mcp.add_tool(fn) / server.add_tool(fn) / app.tool(fn) (call form,
 # not decorator). Only honoured when the receiver name is in
@@ -153,13 +172,15 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
     },
     {
         # session.execute() / db.execute() — write unless first arg is select() or SELECT text
+        # Also exclude SET TRANSACTION (read-only transaction setup, not a mutation).
+        # Do NOT add bare "SET" — SET search_path / SET role mutate session state.
         "category": "database_write",
         "risk": 2,
         "match": {
             "obj_contains": ["session", "db", "conn", "connection"],
             "attr_exact": ["execute", "executemany"],
             "first_arg_excludes": ["select"],
-            "sql_excludes": ["SELECT"],
+            "sql_excludes": ["SELECT", "SET TRANSACTION"],
         },
     },
     {
@@ -425,6 +446,24 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "match": {
             "obj_contains": ["subprocess"],
             "attr_contains": ["run", "call", "Popen", "check_call", "check_output"],
+        },
+    },
+    {
+        # asyncio.create_subprocess_exec / loop.create_subprocess_exec
+        # Covers: await asyncio.create_subprocess_exec(...)
+        #         process = loop.create_subprocess_exec(...)
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["create_subprocess_exec", "create_subprocess_shell"],
+        },
+    },
+    {
+        # bare-name import: from asyncio import create_subprocess_exec
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "name_contains": ["create_subprocess_exec", "create_subprocess_shell"],
         },
     },
     {

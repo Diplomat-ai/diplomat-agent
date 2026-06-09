@@ -18,6 +18,8 @@ from diplomat_agent.scanner.patterns import (
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
     HELPER_CALL_EXCLUDE_PATTERNS,
+    MCP_CLIENT_IMPORTS,
+    MCP_CLIENT_SESSION_NAMES,
     MCP_DISPATCH_DECORATOR_ATTRS,
     MCP_INSTANCE_NAMES,
     MCP_REGISTRATION_ATTRS,
@@ -736,6 +738,69 @@ def _resolve_call_effects(
 # ---------------------------------------------------------------------------
 
 
+def _has_mcp_client_call_tool(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Return True if the function body contains an <obj>.call_tool(...) call
+
+    where obj.id (lowercased) is one of MCP_CLIENT_SESSION_NAMES
+    (session / client / _session).  Only Call nodes are checked — decorators
+    are intentionally excluded per GATE 4 spec.
+    """
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr != "call_tool":
+            continue
+        recv = func.value
+        if isinstance(recv, ast.Name) and recv.id.lower() in MCP_CLIENT_SESSION_NAMES:
+            return True
+    return False
+
+
+def _parse_tool_annotations(decorator: ast.Call) -> "tuple[bool | None, bool | None]":
+    """Parse readOnlyHint and destructiveHint from a @mcp.tool(...) decorator AST node.
+
+    Supports two shapes:
+    - @mcp.tool(readOnlyHint=True, destructiveHint=False, ...)
+    - @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, ...), ...)
+
+    Returns (readonly_hint, destructive_hint). Any non-Constant boolean value → None.
+    Never raises; returns (None, None) on any unexpected structure.
+    """
+    def _read_bool_kwarg(keywords: list, name: str) -> "bool | None":
+        for kw in keywords:
+            if kw.arg == name and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, bool):
+                return kw.value.value
+        return None
+
+    readonly: "bool | None" = None
+    destructive: "bool | None" = None
+
+    try:
+        # Check direct kwargs first: @mcp.tool(readOnlyHint=True, ...)
+        readonly = _read_bool_kwarg(decorator.keywords, "readOnlyHint")
+        destructive = _read_bool_kwarg(decorator.keywords, "destructiveHint")
+
+        # If not found directly, look inside annotations=ToolAnnotations(...)
+        if readonly is None or destructive is None:
+            for kw in decorator.keywords:
+                if kw.arg == "annotations" and isinstance(kw.value, ast.Call):
+                    inner = kw.value
+                    if readonly is None:
+                        readonly = _read_bool_kwarg(inner.keywords, "readOnlyHint")
+                    if destructive is None:
+                        destructive = _read_bool_kwarg(inner.keywords, "destructiveHint")
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+
+    return readonly, destructive
+
+
 def _analyze_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     source_lines: list[str],
@@ -743,6 +808,7 @@ def _analyze_function(
     module_imports: set[str],
     package_index: "PackageIndex | None" = None,
     module_is_mcp: bool = False,
+    module_is_mcp_client: bool = False,
     programmatic_mcp_tools: "set[str] | None" = None,
     interproc_source_cache: "dict[str, list[str]] | None" = None,
 ) -> Tool | None:
@@ -791,13 +857,20 @@ def _analyze_function(
                 deduped.append(se)
         side_effects = deduped
 
-    if not side_effects:
+    # GATE 4 — MCP client call_tool detection.
+    # A function that calls session/client/_session.call_tool(...) in its body
+    # is an opaque proxy to a remote MCP server.  It may have no local side
+    # effects that our patterns catch, so we must bypass the "no side effects →
+    # None" gate for these functions.
+    is_mcp_client_proxy = module_is_mcp_client and _has_mcp_client_call_tool(func_node)
+
+    if not side_effects and not is_mcp_client_proxy:
         return None
 
     # --- Filter out pure read-only functions ---
     # A function is read-only only if ALL its detected patterns are read-only.
     write_effects = [se for se in side_effects if se.category != "read"]
-    if not write_effects:
+    if not write_effects and not is_mcp_client_proxy:
         return None
 
     # --- Extract parameters ---
@@ -856,26 +929,42 @@ def _analyze_function(
         if auto_retried:
             break
 
-    # --- Detect MCP tool exposure ---
-    # Heuristic: if the module imports an MCP server package (module_is_mcp gate)
-    # and the function has an @<instance>.tool decorator, it is an MCP-exposed tool.
-    # We match on the final attribute name only (not the instance variable name),
-    # which covers @mcp.tool, @app.tool, @server.tool regardless of variable name.
-    # NOTE: bare @tool (from fastmcp import tool) is NOT matched in v1 — the
-    # attribute-based pattern covers >95% of real-world cases with lower FP risk.
-    # NOTE: a @mcp.tool with no detected side effects returns None from this
-    # function, so only tools with real-world side effects appear in the output.
-    # This is intentional: read-only MCP tools have no concern; the denominator
-    # for MCP benchmarks is "MCP tools with real-world side effects detected".
+    # --- Detect MCP tool / client exposure ---
+    # Priority: mcp_client (GATE 4) > mcp_tool (server-side).
+    # module_is_mcp_client is only True when module_is_mcp is False (mutually
+    # exclusive by construction in scan_file), so the ordering is safe.
     exposure = "internal"
     exposure_evidence = ""
-    if module_is_mcp:
+    readonly_hint: "bool | None" = None
+    destructive_hint: "bool | None" = None
+
+    # GATE 4 — MCP client: function body contains <session|client|_session>.call_tool(...)
+    if is_mcp_client_proxy:
+        exposure = "mcp_client"
+        # exposure_evidence is the call site line; best-effort from write_effects or body.
+        for node in ast.walk(func_node):
+            if not isinstance(node, ast.Call):
+                continue
+            func_ast = node.func
+            if (
+                isinstance(func_ast, ast.Attribute)
+                and func_ast.attr == "call_tool"
+                and isinstance(func_ast.value, ast.Name)
+                and func_ast.value.id.lower() in MCP_CLIENT_SESSION_NAMES
+            ):
+                exposure_evidence = _src(node, source_lines)
+                break
+
+    if module_is_mcp and exposure == "internal":
         for dec in func_node.decorator_list:
             dec_unparsed = ast.unparse(dec)
             dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
             if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
                 exposure = "mcp_tool"
                 exposure_evidence = "@" + dec_unparsed[:80]
+                # Parse ToolAnnotations hints from the decorator AST node
+                if isinstance(dec, ast.Call):
+                    readonly_hint, destructive_hint = _parse_tool_annotations(dec)
                 break
         # FIX B v1 (v0.5.0) — programmatic registration via mcp.add_tool(fn)
         # promotes the referenced function to mcp_tool exposure.
@@ -928,7 +1017,7 @@ def _analyze_function(
             if ignored:
                 break
 
-    return Tool(
+    tool = Tool(
         name=func_node.name,
         file=file_path,
         line=func_node.lineno,
@@ -942,7 +1031,10 @@ def _analyze_function(
         ignore_reason=ignore_reason,
         exposure=exposure,
         exposure_evidence=exposure_evidence,
+        readonly_hint=readonly_hint,
+        destructive_hint=destructive_hint,
     )
+    return tool
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1078,12 @@ def scan_file(
 
     # Detect MCP server context via import-based gate
     module_is_mcp = bool(module_imports & {s.lower() for s in MCP_SERVER_IMPORTS})
+
+    # GATE 4 — Detect MCP client context.
+    # A module is an MCP client when it imports from MCP_CLIENT_IMPORTS AND is
+    # not simultaneously an MCP server (the two roles are mutually exclusive in
+    # practice and the server imports take precedence).
+    module_is_mcp_client = bool(module_imports & MCP_CLIENT_IMPORTS) and not module_is_mcp
 
     # FIX 3 — extended gate: detect @<name>.tool() in files that import an MCP
     # instance from a local/shared module (e.g. `from .server import mcp`).
@@ -1083,6 +1181,7 @@ def scan_file(
                 module_imports=module_imports,
                 package_index=package_index,
                 module_is_mcp=module_is_mcp,
+                module_is_mcp_client=module_is_mcp_client,
                 programmatic_mcp_tools=programmatic_mcp_tools,
                 interproc_source_cache=_interproc_cache,
             )
