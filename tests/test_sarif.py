@@ -73,7 +73,7 @@ class TestSARIF:
         sarif = generate_sarif(result)
         rule_ids = {r["id"] for r in sarif["runs"][0]["tool"]["driver"]["rules"]}
         # process_refund → DA004 (payment), update_record → DA009 (partially guarded)
-        assert rule_ids <= {"DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009"}
+        assert rule_ids <= {"DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009", "DA010"}
 
     def test_sarif_levels_match_verdicts(self):
         result = _make_result()
@@ -112,11 +112,11 @@ class TestSARIF:
         assert parsed["version"] == "2.1.0"
 
     def test_sarif_always_emits_9_rules(self):
-        """driver.rules must always contain DA001-DA009 regardless of findings."""
+        """driver.rules must always contain DA001-DA010 regardless of findings."""
         result = _make_result()
         sarif = generate_sarif(result)
         rule_ids = sorted([r["id"] for r in sarif["runs"][0]["tool"]["driver"]["rules"]])
-        expected = ["DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009"]
+        expected = ["DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009", "DA010"]
         assert rule_ids == expected
 
     def test_sarif_rules_have_required_fields(self):
@@ -131,11 +131,11 @@ class TestSARIF:
             assert "helpUri" in rule
 
     def test_sarif_9_rules_with_empty_scan(self):
-        """Even with zero findings, all 9 rules must be present."""
+        """Even with zero findings, all 10 rules (DA001-DA010) must be present."""
         empty = ScanResult(tools=[], scenarios=[], summary=build_summary([]))
         sarif = generate_sarif(empty)
         rule_ids = sorted([r["id"] for r in sarif["runs"][0]["tool"]["driver"]["rules"]])
-        expected = ["DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009"]
+        expected = ["DA001", "DA002", "DA003", "DA004", "DA005", "DA006", "DA007", "DA008", "DA009", "DA010"]
         assert rule_ids == expected
         assert sarif["runs"][0]["results"] == []
 
