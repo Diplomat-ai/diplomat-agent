@@ -116,13 +116,21 @@ class TestMcpLowLevel:
         self.tools = {t.name: t for t in tools}
 
     def test_handle_tool_detected(self):
-        """Dispatcher body has os.remove → detected as tool with side effect."""
+        """Zero-branch dispatcher must surface (GATE 2 fallback)."""
         assert "handle_tool" in self.tools
 
     def test_handle_tool_exposure_is_mcp_internal(self):
-        """@server.call_tool dispatcher in an MCP module whose branches cannot be resolved
-        keeps exposure='mcp_internal' (reclassified from 'internal' by GATE 6)."""
+        """@server.call_tool dispatcher with no resolvable branches keeps
+        exposure='mcp_internal' (GATE 6 classification)."""
         assert self.tools["handle_tool"].exposure == "mcp_internal"
+
+    def test_handle_tool_verdict_is_opaque(self):
+        """GATE 2: dispatcher with zero branches must be OPAQUE — per-tool
+        semantics are unknown, honesty floor applies."""
+        assert self.tools["handle_tool"].verdict == "OPAQUE"
+
+    def test_handle_tool_opaque_reason_mentions_dispatcher(self):
+        assert "dispatcher" in self.tools["handle_tool"].opaque_reason
 
 
 # ---------------------------------------------------------------------------
