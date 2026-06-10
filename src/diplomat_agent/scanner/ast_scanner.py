@@ -1411,6 +1411,22 @@ def _analyze_function(
             if ignored:
                 break
 
+    # v0.5.2 GATE 3 — mcp_client proxies must carry a non-empty opaque_reason
+    # so downstream consumers (JSON, registry, terminal) see why the verdict is
+    # OPAQUE. Use the call-site evidence when available, otherwise a generic
+    # default.
+    opaque_reason = ""
+    if exposure == "mcp_client":
+        if exposure_evidence:
+            opaque_reason = (
+                f"mcp_client proxy: remote tool semantics not in scan unit "
+                f"({exposure_evidence})"
+            )
+        else:
+            opaque_reason = (
+                "mcp_client proxy: remote tool semantics not in scan unit"
+            )
+
     tool = Tool(
         name=func_node.name,
         file=file_path,
@@ -1427,6 +1443,7 @@ def _analyze_function(
         exposure_evidence=exposure_evidence,
         readonly_hint=readonly_hint,
         destructive_hint=destructive_hint,
+        opaque_reason=opaque_reason,
     )
     return tool
 

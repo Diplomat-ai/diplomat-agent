@@ -142,6 +142,49 @@ class TestRenderJson:
             for field in ("function", "file", "line", "actions", "checks", "missing", "verdict"):
                 assert field in f
 
+    def test_json_finding_includes_exposure(self):
+        """GATE 3 — every finding must carry the exposure tag."""
+        result = _make_handcrafted_result()
+        output = render_json(result, "./test/")
+        data = json.loads(output)
+        for f in data["findings"]:
+            assert "exposure" in f, (
+                f"finding missing 'exposure' field: {f}"
+            )
+
+    def test_json_finding_serializes_opaque_reason(self):
+        """GATE 3 — opaque_reason is serialized when non-empty."""
+        from diplomat_agent.models import ScanResult, Tool
+        tool = Tool(
+            name="proxy",
+            file="x.py",
+            line=1,
+            params=[],
+            side_effects=[],
+            guards=[],
+            verdict="OPAQUE",
+            exposure="mcp_client",
+            opaque_reason="mcp_client proxy: remote tool semantics not in scan unit",
+        )
+        result = ScanResult(tools=[tool], summary={"total_tools": 1}, scenarios=[])
+        data = json.loads(render_json(result, "./x/"))
+        f = data["findings"][0]
+        assert f.get("opaque_reason") == (
+            "mcp_client proxy: remote tool semantics not in scan unit"
+        )
+        assert f["exposure"] == "mcp_client"
+
+    def test_json_finding_omits_empty_opaque_reason(self):
+        """GATE 3 — opaque_reason key is omitted when empty (compact output)."""
+        result = _make_handcrafted_result()
+        output = render_json(result, "./test/")
+        data = json.loads(output)
+        for f in data["findings"]:
+            if "opaque_reason" in f:
+                assert f["opaque_reason"], (
+                    "opaque_reason key present but empty — should be omitted"
+                )
+
 
 # ---------------------------------------------------------------------------
 # Full pipeline through fixtures

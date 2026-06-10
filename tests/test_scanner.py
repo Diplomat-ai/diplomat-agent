@@ -933,6 +933,17 @@ class TestGate4McpClient:
             f"Expected verdict='OPAQUE', got {tool.verdict!r}"
         )
 
+    def test_mcp_client_has_default_opaque_reason(self):
+        """GATE 3 — mcp_client proxies must carry a non-empty opaque_reason
+        explaining why the verdict is OPAQUE."""
+        tool = self.tools["call_remote_tool"]
+        assert tool.opaque_reason, (
+            f"mcp_client must have non-empty opaque_reason; got {tool.opaque_reason!r}"
+        )
+        assert "mcp_client" in tool.opaque_reason or "remote" in tool.opaque_reason, (
+            f"opaque_reason should mention mcp_client / remote; got {tool.opaque_reason!r}"
+        )
+
     def test_innocent_helper_excluded(self):
         """innocent_helper: no call_tool → must NOT appear in scan output."""
         assert "innocent_helper" not in self.tools, (
