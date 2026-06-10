@@ -74,6 +74,8 @@ class PackageIndex:
         self.root = package_root.resolve()
         self._defs: dict = {}
         self._imports: dict = {}
+        # GATE 5 — top-level ClassDefs indexed per file for class-method resolution.
+        self._classes: dict = {}  # file_key → {class_name: ClassDef}
         # FIX A v1 (v0.5.0) — memoization for inter-procedural side-effect /
         # guard resolution. Keyed by (callee_file_path_str, callee_funcname).
         # Value: tuple[list[SideEffect], list[Guard]] from the callee body
@@ -114,6 +116,7 @@ class PackageIndex:
             log.debug("interprocedural: cannot parse %s: %s", file_path, e)
             self._defs[key] = {}; self._imports[key] = {}; return
         self._defs[key] = {n.name: n for n in ast.iter_child_nodes(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        self._classes[key] = {n.name: n for n in ast.iter_child_nodes(tree) if isinstance(n, ast.ClassDef)}
         imports = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
@@ -201,6 +204,44 @@ class PackageIndex:
         result = (self._defs.get(from_key, {}).get(name), from_file)
         self._lookup_cache[cache_key] = result
         return result
+
+    def lookup_class_method(
+        self,
+        class_name: str,
+        method_name: str,
+        from_file: Path,
+    ):
+        """Return (method_def, source_file) for ClassName.method_name, or (None, from_file).
+
+        Resolution order:
+        1. Same file (from_file) — checks top-level ClassDefs.
+        2. Cross-file — checks imports of from_file for class_name, then loads that file.
+        """
+        self._load(from_file)
+        from_key = self._path_key(from_file)
+
+        # 1. Same file
+        cls_def = self._classes.get(from_key, {}).get(class_name)
+        if cls_def is not None:
+            for item in cls_def.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == method_name:
+                    return item, from_file
+
+        # 2. Cross-file via imports
+        imports = self._imports.get(from_key, {})
+        src_path = imports.get(class_name)
+        if src_path is None:
+            return None, from_file
+
+        self._load(src_path)
+        src_key = self._path_key(src_path)
+        cls_def = self._classes.get(src_key, {}).get(class_name)
+        if cls_def is not None:
+            for item in cls_def.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == method_name:
+                    return item, src_path
+
+        return None, from_file
 
     def resolve_decorator_guards(self, dec_node, from_file: Path) -> list[Guard]:
         node = dec_node.func if isinstance(dec_node, ast.Call) else dec_node

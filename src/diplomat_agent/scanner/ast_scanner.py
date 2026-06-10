@@ -761,6 +761,272 @@ def _has_mcp_client_call_tool(
     return False
 
 
+# ---------------------------------------------------------------------------
+# GATE 5 — Dispatcher resolution
+# ---------------------------------------------------------------------------
+
+def _if_branch_key(test: ast.expr) -> "str | None":
+    """Extract the string key from an if-condition like `name == "key"` or `"key" == name`."""
+    if not isinstance(test, ast.Compare):
+        return None
+    if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+        return None
+    if len(test.comparators) != 1:
+        return None
+    left, right = test.left, test.comparators[0]
+    if isinstance(right, ast.Constant) and isinstance(right.value, str):
+        return right.value
+    if isinstance(left, ast.Constant) and isinstance(left.value, str):
+        return left.value
+    return None
+
+
+def _match_case_key(pattern: ast.expr) -> "str | None":
+    """Extract the string key from a match-case pattern (MatchValue of Constant or Attribute)."""
+    # ast.Match is Python 3.10+; guard against older interpreters at import-time
+    match_value_type = getattr(ast, "MatchValue", None)
+    if match_value_type is None or not isinstance(pattern, match_value_type):
+        return None
+    val = pattern.value
+    if isinstance(val, ast.Constant) and isinstance(val.value, str):
+        return val.value
+    # Enum.MEMBER — use the member name as the key
+    if isinstance(val, ast.Attribute) and isinstance(val.value, ast.Name):
+        return val.attr
+    return None
+
+
+def _extract_dispatch_branches(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> "list[tuple[str, list]]":
+    """Return [(key, branch_stmts)] extracted from if/elif chains and match/case in func_node.
+
+    Visits the function body (non-recursive into nested functions).
+    """
+    branches: list[tuple[str, list]] = []
+    match_type = getattr(ast, "Match", None)
+
+    def _walk_stmts(stmts: list) -> None:
+        for stmt in stmts:
+            if match_type and isinstance(stmt, match_type):
+                for case in stmt.cases:
+                    key = _match_case_key(case.pattern)
+                    if key is not None:
+                        branches.append((key, case.body))
+            elif isinstance(stmt, ast.If):
+                key = _if_branch_key(stmt.test)
+                if key is not None:
+                    branches.append((key, stmt.body))
+                # Walk the orelse chain for elif/else
+                _walk_stmts(stmt.orelse)
+            elif isinstance(stmt, (ast.Try, ast.With, ast.AsyncWith)):
+                # Peek inside try bodies but not nested functions
+                body = getattr(stmt, "body", [])
+                _walk_stmts(body)
+            # Do NOT recurse into nested FunctionDef/AsyncFunctionDef
+
+    _walk_stmts(func_node.body)
+    return branches
+
+
+_TEXT_CONTENT_NAMES: frozenset[str] = frozenset({
+    "TextContent", "types.TextContent", "ImageContent", "EmbeddedResource",
+})
+
+
+def _find_first_handler_call(stmts: list) -> "ast.Call | None":
+    """Return the first ast.Call in branch_stmts that is not a TextContent constructor."""
+    for stmt in stmts:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                func_name = ast.unparse(node.func).split("(")[0]
+                if func_name in _TEXT_CONTENT_NAMES:
+                    continue
+                return node
+    return None
+
+
+def _resolve_handler_callable(
+    call_node: ast.Call,
+    tree: ast.Module,
+    from_file: "Path",
+    package_index: "PackageIndex | None",
+) -> "tuple[ast.FunctionDef | ast.AsyncFunctionDef | None, Path]":
+    """Resolve a handler call node to its FunctionDef.
+
+    Handles:
+    - Name('func')(...) — same-file or cross-file top-level function
+    - Attribute(Name('Class'), 'method')(...) — class method, same-file or cross-file
+    """
+    func = call_node.func
+    # Unwrap awaitables: await f(...) is parsed as Await(value=Call(...)) — the func attr
+    # of the Call already gives us what we need, so nothing extra needed here.
+
+    if isinstance(func, ast.Name):
+        # Plain call: func_name(args)
+        name = func.id
+        if package_index is not None:
+            def_node, def_file = package_index._lookup_def(name, from_file)
+            if def_node is not None:
+                return def_node, def_file
+        # Same-file fallback (package_index=None in tests)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                return node, from_file
+        return None, from_file
+
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        # Class.method(args)
+        class_name = func.value.id
+        method_name = func.attr
+        if package_index is not None:
+            def_node, def_file = package_index.lookup_class_method(class_name, method_name, from_file)
+            if def_node is not None:
+                return def_node, def_file
+        # Same-file fallback
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == method_name
+                    ):
+                        return item, from_file
+        return None, from_file
+
+    return None, from_file
+
+
+def _resolve_dispatcher(
+    dispatcher_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    tree: ast.Module,
+    source_lines: list[str],
+    file_path: str,
+    package_index: "PackageIndex | None",
+    interproc_source_cache: "dict[str, list[str]] | None",
+) -> "tuple[list[Tool], set[int]]":
+    """Resolve a @*.call_tool dispatcher into one Tool per dispatched branch.
+
+    Returns (tools, handler_node_ids) where handler_node_ids are the ast node ids
+    of resolved handler FunctionDefs in the same file (so scan_file can skip them
+    in the main analysis loop and avoid double-emitting them as 'internal' tools).
+
+    For each if/elif or match/case branch:
+    - Finds the first handler call in the branch body.
+    - Resolves it to a FunctionDef (same-file Name, same-file or cross-file Class.method).
+    - Calls _analyze_function on the resolved handler to get real side effects + guards.
+    - Returns a Tool with name=branch_key, exposure="mcp_tool".
+
+    Unresolvable branches produce a Tool with opaque_reason set → OPAQUE verdict.
+    """
+    from diplomat_agent.models import Tool  # local import to avoid circular at module level
+
+    fp = Path(file_path)
+    branches = _extract_dispatch_branches(dispatcher_node)
+    if not branches:
+        return [], set()
+
+    result: list[Tool] = []
+    # (file_path_str, lineno) pairs for same-file handlers to skip in the main loop.
+    # We use location instead of id() because PackageIndex re-parses files, so
+    # the AST node objects differ from scan_file's tree despite being the same source.
+    handler_locs: set[tuple[str, int]] = set()
+
+    for key, branch_stmts in branches:
+        handler_call = _find_first_handler_call(branch_stmts)
+
+        if handler_call is None:
+            # Branch has no callable (e.g. `return []`) — LOW_RISK, no opaque_reason
+            result.append(Tool(
+                name=key,
+                file=file_path,
+                line=dispatcher_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+            ))
+            continue
+
+        handler_def, handler_path = _resolve_handler_callable(handler_call, tree, fp, package_index)
+
+        if handler_def is None:
+            result.append(Tool(
+                name=key,
+                file=file_path,
+                line=dispatcher_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+                opaque_reason="dispatcher handler not in scan unit — not analyzed",
+            ))
+            continue
+
+        # Track same-file handler locations so the main loop can skip re-analysis
+        if handler_path == fp:
+            handler_locs.add((str(fp), handler_def.lineno))
+
+        # Load source lines for the handler file
+        handler_path_str = str(handler_path)
+        if handler_path == fp:
+            handler_source_lines = source_lines
+        elif interproc_source_cache and handler_path_str in interproc_source_cache:
+            handler_source_lines = interproc_source_cache[handler_path_str]
+        else:
+            try:
+                raw = handler_path.read_text(encoding="utf-8-sig", errors="replace")
+                handler_source_lines = raw.splitlines()
+                if interproc_source_cache is not None:
+                    interproc_source_cache[handler_path_str] = handler_source_lines
+            except (OSError, ValueError):
+                handler_source_lines = []
+
+        # Collect imports of the handler module so _analyze_function can use them
+        try:
+            handler_tree = ast.parse(
+                "\n".join(handler_source_lines), filename=handler_path_str
+            )
+            handler_imports = _collect_imports(handler_tree)
+        except SyntaxError:
+            handler_imports = set()
+
+        tool = _analyze_function(
+            func_node=handler_def,
+            source_lines=handler_source_lines,
+            file_path=handler_path_str,
+            module_imports=handler_imports,
+            package_index=package_index,
+            module_is_mcp=False,
+            module_is_mcp_client=False,
+            programmatic_mcp_tools=None,
+            interproc_source_cache=interproc_source_cache,
+        )
+
+        if tool is None:
+            # Handler resolved but has no detectable write side effects → LOW_RISK
+            tool = Tool(
+                name=key,
+                file=handler_path_str,
+                line=handler_def.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+            )
+        else:
+            tool.name = key
+            tool.exposure = "mcp_tool"
+            tool.exposure_evidence = f"@*.call_tool dispatcher [{key}]"
+
+        result.append(tool)
+
+    return result, handler_locs
+
+
 def _parse_tool_annotations(decorator: ast.Call) -> "tuple[bool | None, bool | None]":
     """Parse readOnlyHint and destructiveHint from a @mcp.tool(...) decorator AST node.
 
@@ -973,6 +1239,14 @@ def _analyze_function(
                 exposure = "mcp_tool"
                 exposure_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
 
+    # GATE 6 — reclassify internal helpers inside MCP modules as mcp_internal so
+    # the terminal reporter can fold them by default (--verbose to expand).
+    # This is a presentation-only change: JSON does not serialize "internal" or
+    # "mcp_internal" exposure values (only "mcp_tool" is serialised), so JSON
+    # output is byte-identical regardless of this reclassification.
+    if exposure == "internal" and module_is_mcp:
+        exposure = "mcp_internal"
+
     # --- Detect # diplomat:ok / # canary:ok / # checked:ok inline comments ---
     ignored = False
     ignore_reason = ""
@@ -1112,28 +1386,17 @@ def scan_file(
                             module_is_mcp = True
                             break
 
-    # Warn once per file when a low-level @.call_tool dispatcher is present.
-    # Per-tool resolution for this pattern is not supported in v1; FastMCP
-    # @mcp.tool is fully supported.
+    # GATE 5 — collect @*.call_tool dispatcher nodes for per-tool resolution.
+    _dispatcher_nodes: list = []
     if module_is_mcp:
-        _found_dispatch = False
         for _node in ast.walk(tree):
-            if _found_dispatch:
-                break
             if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for _dec in _node.decorator_list:
                     _dec_parts = ast.unparse(_dec).split("(")[0].rsplit(".", 1)
                     if len(_dec_parts) == 2 and _dec_parts[1] in MCP_DISPATCH_DECORATOR_ATTRS:
-                        print(
-                            f"\u26a0 low-level MCP dispatcher detected (@server.call_tool) in "
-                            f"{file_path} \u2014 per-tool analysis not supported in v1; "
-                            f"FastMCP @mcp.tool is fully supported.",
-                            file=sys.stderr,
-                        )
-                        # FIX 4 — track dispatcher files for stats / reporting
+                        _dispatcher_nodes.append(_node)
                         if _dispatcher_files is not None:
                             _dispatcher_files.append(str(file_path))
-                        _found_dispatch = True
                         break
 
     # FIX B v1 (v0.5.0) — collect programmatically-registered MCP tool names.
@@ -1172,8 +1435,37 @@ def scan_file(
     # Shared inter-procedural source-line cache for this file scan.
     _interproc_cache: dict[str, list[str]] = {}
 
+    # GATE 5 — resolve dispatcher nodes into per-tool findings.
+    _dispatcher_node_ids: set[int] = set()   # dispatcher FunctionDef node ids (id() — same tree)
+    _handler_locs: set[tuple[str, int]] = set()  # (file_str, lineno) for same-file handlers
+    for _disp_node in _dispatcher_nodes:
+        _resolved, _hlocs = _resolve_dispatcher(
+            dispatcher_node=_disp_node,
+            tree=tree,
+            source_lines=source_lines,
+            file_path=str(file_path),
+            package_index=package_index,
+            interproc_source_cache=_interproc_cache,
+        )
+        if _resolved:
+            tools.extend(_resolved)
+            _dispatcher_node_ids.add(id(_disp_node))
+            _handler_locs.update(_hlocs)
+        else:
+            # Could not extract any branches — fall back to a single OPAQUE tool
+            print(
+                f"\u26a0 low-level MCP dispatcher (@server.call_tool) in {file_path} "
+                f"\u2014 no branches resolved; emitting OPAQUE fallback.",
+                file=sys.stderr,
+            )
+
+    _file_path_str = str(file_path)
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if id(node) in _dispatcher_node_ids:
+                continue  # already handled by _resolve_dispatcher
+            if _handler_locs and (_file_path_str, node.lineno) in _handler_locs:
+                continue  # same-file handler already emitted under its dispatch key
             tool = _analyze_function(
                 func_node=node,
                 source_lines=source_lines,

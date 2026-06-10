@@ -111,6 +111,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable rich terminal formatting even if rich is installed",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show mcp_internal helpers in terminal output (hidden by default)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"diplomat-agent {__version__}",
@@ -304,9 +309,16 @@ def main(argv: list[str] | None = None) -> int:
     # Terminal/markdown/json output (unless --format registry exclusively)
     if args.format != "registry":
         if args.format == "terminal":
+            _verbose = getattr(args, "verbose", False)
             if output_file:
                 from diplomat_agent.reporter.terminal import render_plain
-                _write_output(render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats), output_file)
+                _write_output(
+                    render_plain(
+                        result, scanned_path, mcp_summary=mcp_summary,
+                        file_stats=file_stats, verbose=_verbose,
+                    ),
+                    output_file,
+                )
             else:
                 from diplomat_agent.reporter.terminal import print_report
                 print_report(
@@ -315,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
                     use_rich=not args.no_rich,
                     mcp_summary=mcp_summary,
                     file_stats=file_stats,
+                    verbose=_verbose,
                 )
 
         elif args.format == "markdown":
