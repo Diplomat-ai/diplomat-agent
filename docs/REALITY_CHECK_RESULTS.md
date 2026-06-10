@@ -194,6 +194,7 @@ full history rather than just the latest number.
 | v0.2.0 | Apr 2026 | 7,029 | 5,344 | 76% | Initial study. Intra-procedural only. Repos at HEAD Apr 2026. |
 | v0.4.1 | Jun 4, 2026 | 5,878 | 4,499 | 76.5% | Repos re-cloned at HEAD (corpus drift). Reader-prefix FP fix (FIX 2). Inter-proc for decorators only. |
 | v0.5.0 | Jun 5, 2026 | 6,529 | 4,628 | 70.9% | Inter-procedural call tracing (depth 2). 651 new findings; ~80% already guarded in helper. 129 genuinely new unguarded delegation paths. |
+| v0.5.1 | Jun 10, 2026 | 6,535 | 4,634 | ~70.9% | MCP fidelity (gates 1-6). FN1: +6 asyncio detections. 16-repo number stable (only 3 repos locally re-measured; full re-baseline pending). See v0.5.1 section below. |
 
 **Why the figure dropped from 76% to 71%:** v0.5.0 added same-package inter-procedural call
 tracing. This surfaced 651 additional delegated side-effects — but 522 of those (80%) were
@@ -205,6 +206,51 @@ instrument improving, not the codebases improving.
 **Each number is reproducible** by cloning the listed repos and running the matching scanner
 version. The figure will continue to evolve as coverage deepens (class-method resolution is
 planned for a future release); we treat that as a feature, not an inconsistency.
+
+---
+
+## v0.5.1 — MCP fidelity gates 1-6
+
+**Scope:** MCP fidelity improvements (gates 1-4: async, readonly tx fix, contract violations,
+OPAQUE; gates 5-6: dispatcher resolution, mcp_internal folding). Full 16-repo re-baseline
+requires all repos locally; only 3 framework repos + 4 MCP corpus repos re-measured.
+
+### Per-gate impact on benchmark
+
+| Gate | Change type | 16-repo impact | Cause |
+|---|---|---|---|
+| GATE 1 (FP1) | `SET TRANSACTION READ ONLY` excluded from SQL patterns | ~0 (none of 3 measured repos use this) | Precision fix |
+| GATE 2 (FN1) | `asyncio.create_subprocess_exec/shell` now detected | +6 unguarded (skyvern +3, SurfSense +3) | New detection |
+| GATE 3 | `contract_violation` flag (orthogonal to verdict) | 0 (additive field, no count change) | New metadata |
+| GATE 4 | OPAQUE verdict for `session.call_tool()` | 0 on framework repos | New verdict (MCP only) |
+| GATE 5 | Dispatcher resolution → per-tool findings (MCP only) | 0 on framework repos | MCP-corpus only |
+| GATE 6 | `mcp_internal` folding (terminal only, JSON frozen) | 0 | Presentation only |
+
+### MCP corpus delta (v0.5.0 → v0.5.1)
+
+| Repo | v0.5.0 total | v0.5.1 total | v0.5.0 unguarded | v0.5.1 unguarded | Notes |
+|---|---|---|---|---|---|
+| kubectl-mcp-server | 416 | 416 | 337 | 337 | Stable; 175 mcp_internal helpers folded in terminal |
+| k8s-mcp-server | 2 | 3 | 0 | 1 | `check_cli_installed` newly detected (Gate 2 asyncio) |
+| docker-mcp | 4 | 9 | 4 | 6 | Gate 5: handle_call_tool → 4 named tools; handlers.py parsed on 3.13 |
+| servers/src (git) | 4 | 14 | 4 | 3 | Gate 5: call_tool dispatcher → 12 per-tool entries; `git_create_branch` → CREATE_BRANCH |
+
+**New headline rule for MCP servers:** report the MCP-exposed tool count, not the inflated total.
+For example kubectl-mcp-server = "76 MCP-exposed tools (37 unguarded)", not "416 total" which
+includes 175 internal helpers and 165 private utilities.
+
+### Framework repos (3 of 16 locally re-measured)
+
+| Repo | v0.5.0 total | v0.5.1 total | v0.5.0 unguarded | v0.5.1 unguarded | Delta cause |
+|---|---|---|---|---|---|
+| skyvern | 511 | 514 | 313 | 316 | +3 asyncio.create_subprocess_exec/shell (Gate 2) |
+| SurfSense | 376 | 379 | 169 | 170 | +3 asyncio (Gate 2); +1 unguarded (SurfSense MCP client) |
+| FinRobot | 81 | 81 | 63 | 63 | Stable |
+
+The 13 remaining repos could not be re-measured locally; published 70.9% is the v0.5.0 figure.
+Gate 2 adds at most +6 unguarded from 3 repos (~0.09% of 6,529 total). The headline **~70.9%
+is stable** — Gate 6 is JSON-frozen, and Gate 5 only affects MCP-corpus (excluded from the
+denominator when OPAQUE).
 
 ---
 
