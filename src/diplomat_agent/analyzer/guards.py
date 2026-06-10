@@ -19,7 +19,8 @@ def compute_verdict(tool: Tool) -> str:
     """
     # GATE 4 — MCP client proxies are opaque: their real effect lives on the
     # remote server and cannot be statically analyzed from this module.
-    if tool.exposure == "mcp_client":
+    # GATE 5 — dispatcher branches whose handler could not be resolved are also opaque.
+    if tool.exposure == "mcp_client" or tool.opaque_reason:
         return "OPAQUE"
 
     write_effects = [se for se in tool.side_effects if se.category != "read"]
