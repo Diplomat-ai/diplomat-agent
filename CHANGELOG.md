@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.5.1] — 2026-06-10
+
+### Added (Gates 1-4, merged earlier as fix/mcp-fidelity-0.5.1)
+- **GATE 1 (FP1)**: `SET TRANSACTION READ ONLY` / `BEGIN READ ONLY` excluded
+  from SQL write patterns — read-only transaction setup is not a write.
+- **GATE 2 (FN1)**: `asyncio.create_subprocess_exec` and
+  `asyncio.create_subprocess_shell` detected as `destructive` side effects.
+  Previously missed when called as `await asyncio.create_subprocess_exec(...)`.
+- **GATE 3 — contract_violation flag**: `DECLARED_READONLY_BUT_WRITES` and
+  `DECLARED_NONDESTRUCTIVE_BUT_DESTRUCTIVE`. Orthogonal to verdict. Surfaces in
+  JSON, SARIF (rule DA010), and terminal. New JSON fields: `readonly_hint`,
+  `destructive_hint`, `contract_violation`.
+- **GATE 4 — OPAQUE verdict**: `session.call_tool()` / `client.call_tool()` in
+  MCP client modules → `exposure="mcp_client"`, `verdict="OPAQUE"`. OPAQUE excluded
+  from `%unguarded` denominator. New JSON summary fields: `opaque`,
+  `files_unparsed_count`.
+
+### Added (Gates 5-6)
+- **GATE 5 — Dispatcher resolution**: `@server.call_tool()` dispatchers are
+  resolved into one `Tool` per branch. Supports `if/elif` chains and `match/case`
+  (Python 3.10+). Cross-file `Class.method` resolution via new
+  `PackageIndex.lookup_class_method`. Unresolvable handlers → `verdict="OPAQUE"`,
+  `opaque_reason` set (never `LOW_RISK`, never dropped). New `Tool` field:
+  `opaque_reason: str`.
+- **GATE 6 — mcp_internal folding**: helpers inside MCP modules tagged
+  `exposure="mcp_internal"`. Terminal hides them by default; new `--verbose` CLI
+  flag expands them. JSON is byte-identical. `build_summary` counts unchanged.
+
+### JSON schema additions (v0.5.1, all additive)
+`readonly_hint` (bool|null), `destructive_hint` (bool|null), `contract_violation`
+(str), `opaque_reason` (str). Summary: `opaque`, `files_unparsed_count`.
+
+### Benchmark
+70.9% unguarded (16 repos, v0.5.0 baseline) is stable. Gate 2 adds ~+6 detections
+on 3 locally re-measured repos (~0.09%). See `docs/REALITY_CHECK_RESULTS.md`.
+
+---
+
 ## [0.5.0] — 2026-05-01
 
 ### Added

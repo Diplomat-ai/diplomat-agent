@@ -50,6 +50,8 @@ class Tool:
     destructive_hint: "bool | None" = None   # destructiveHint kwarg value
     # Contract violation flag — orthogonal to verdict, set after verdict is computed
     contract_violation: str = "NONE"  # NONE | DECLARED_READONLY_BUT_WRITES | DECLARED_NONDESTRUCTIVE_BUT_DESTRUCTIVE
+    # GATE 5 — set when a dispatcher branch handler could not be resolved; forces OPAQUE
+    opaque_reason: str = ""  # non-empty → compute_verdict returns OPAQUE
 
 
 @dataclass

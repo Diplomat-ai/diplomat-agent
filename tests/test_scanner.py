@@ -952,3 +952,200 @@ class TestGate4McpClient:
         assert self.summary["total_tools"] == 2, (
             f"Expected total_tools=2, got {self.summary['total_tools']}"
         )
+
+
+import sys as _sys
+
+
+class TestGate5Dispatcher:
+    """GATE 5 — @server.call_tool dispatcher resolved into per-tool findings (if/elif fixtures)."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+
+        ifelif_fix = Path(__file__).parent / "fixtures" / "dispatcher_ifelif_samefile.py"
+        pkg_ie = PackageIndex(ifelif_fix.parent)
+        raw_ie = scan_file(ifelif_fix, package_index=pkg_ie)
+        apply_verdicts(raw_ie)
+        cls.ie_tools = {t.name: t for t in raw_ie}
+
+        cf_fix = Path(__file__).parent / "fixtures" / "dispatcher_crossfile" / "server.py"
+        pkg_cf = PackageIndex(cf_fix.parent)
+        raw_cf = scan_file(cf_fix, package_index=pkg_cf)
+        apply_verdicts(raw_cf)
+        cls.cf_tools = {t.name: t for t in raw_cf}
+
+        unr_fix = Path(__file__).parent / "fixtures" / "dispatcher_unresolvable.py"
+        pkg_unr = PackageIndex(unr_fix.parent)
+        raw_unr = scan_file(unr_fix, package_index=pkg_unr)
+        apply_verdicts(raw_unr)
+        cls.unr_tools = {t.name: t for t in raw_unr}
+
+    # if/elif same-file class method ----------------------------------- #
+    def test_dispatcher_ifelif_samefile_classmethod(self):
+        """if/elif 'create' branch resolved to H.create (same-file class method) → destructive."""
+        assert "create" in self.ie_tools, (
+            f"Expected 'create' tool; got tools={list(self.ie_tools)}"
+        )
+        tool = self.ie_tools["create"]
+        assert tool.exposure == "mcp_tool", f"Expected mcp_tool, got {tool.exposure!r}"
+        cats = {se.category for se in tool.side_effects}
+        assert "destructive" in cats, (
+            f"Expected destructive side effect from H.create; got {cats}"
+        )
+        assert "handle_tools" not in self.ie_tools, "Dispatcher must not appear as a Tool"
+
+    # cross-file class method ------------------------------------------ #
+    def test_dispatcher_crossfile_classmethod(self):
+        """if/elif 'create' branch resolved to Handlers.create (cross-file) → destructive."""
+        assert "create" in self.cf_tools, (
+            f"Expected 'create' tool (cross-file); got tools={list(self.cf_tools)}"
+        )
+        tool = self.cf_tools["create"]
+        assert tool.exposure == "mcp_tool", f"Expected mcp_tool, got {tool.exposure!r}"
+        cats = {se.category for se in tool.side_effects}
+        assert "destructive" in cats, (
+            f"Expected destructive side effect from cross-file Handlers.create; got {cats}"
+        )
+        assert "handle_tools" not in self.cf_tools, "Dispatcher must not appear as a Tool"
+
+    # unresolvable handler --------------------------------------------- #
+    def test_dispatcher_unresolvable_is_opaque(self):
+        """Unresolvable handler → opaque_reason set, verdict OPAQUE, never LOW_RISK, never dropped."""
+        assert "remote-op" in self.unr_tools, (
+            f"Unresolvable branch must still be emitted; got tools={list(self.unr_tools)}"
+        )
+        tool = self.unr_tools["remote-op"]
+        assert tool.verdict == "OPAQUE", (
+            f"Expected OPAQUE for unresolvable handler; got {tool.verdict!r}"
+        )
+        assert tool.opaque_reason != "", (
+            "opaque_reason must be set for unresolvable handler"
+        )
+        assert tool.verdict != "LOW_RISK", "OPAQUE handler must never be LOW_RISK"
+
+
+import pytest as _pytest
+
+
+@_pytest.mark.skipif(_sys.version_info < (3, 10), reason="match/case requires Python 3.10+")
+class TestGate5DispatcherMatchCase:
+    """GATE 5 — match/case dispatcher fixture (Python 3.10+ only)."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+
+        mc_fix = Path(__file__).parent / "fixtures" / "dispatcher_matchcase.py"
+        pkg_mc = PackageIndex(mc_fix.parent)
+        raw_mc = scan_file(mc_fix, package_index=pkg_mc)
+        apply_verdicts(raw_mc)
+        cls.mc_tools = {t.name: t for t in raw_mc}
+
+    def test_dispatcher_matchcase_per_tool_commit(self):
+        """match/case 'commit' branch → Tool named 'commit' with destructive side effect."""
+        assert "commit" in self.mc_tools, (
+            f"Expected 'commit' tool; got tools={list(self.mc_tools)}"
+        )
+        tool = self.mc_tools["commit"]
+        assert tool.exposure == "mcp_tool", f"Expected mcp_tool, got {tool.exposure!r}"
+        cats = {se.category for se in tool.side_effects}
+        assert "destructive" in cats, (
+            f"Expected destructive side effect propagated from do_commit; got {cats}"
+        )
+
+    def test_dispatcher_matchcase_dispatcher_not_emitted(self):
+        """The dispatcher function handle_tools must NOT appear as a Tool."""
+        assert "handle_tools" not in self.mc_tools, (
+            "handle_tools (dispatcher) must not be emitted as a Tool"
+        )
+
+    def test_dispatcher_matchcase_list_branch(self):
+        """match/case 'list' branch has no write effects → LOW_RISK (not OPAQUE)."""
+        assert "list" in self.mc_tools, (
+            f"Expected 'list' tool; got tools={list(self.mc_tools)}"
+        )
+        tool = self.mc_tools["list"]
+        assert tool.verdict == "LOW_RISK", (
+            f"Expected LOW_RISK for no-write handler; got {tool.verdict!r}"
+        )
+        assert tool.opaque_reason == "", (
+            f"opaque_reason must be empty for resolved handler; got {tool.opaque_reason!r}"
+        )
+
+
+class TestGate6McpInternal:
+    """GATE 6 — exposure=mcp_internal tagging + terminal folding."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        from diplomat_agent.reporter.terminal import render_plain
+        from diplomat_agent.models import ScanResult
+
+        fixture = Path(__file__).parent / "fixtures" / "mcp_module_with_helpers.py"
+        pkg = PackageIndex(fixture.parent)
+        raw = scan_file(fixture, package_index=pkg)
+        apply_verdicts(raw)
+        cls.tools = {t.name: t for t in raw}
+
+        result = ScanResult(tools=raw, scenarios=[], summary={
+            "total_tools": len(raw), "unguarded": 0, "partially_guarded": 0,
+            "guarded": 0, "low_risk": 0, "opaque": 0,
+        })
+        cls.default_output = render_plain(result, "test", verbose=False)
+        cls.verbose_output = render_plain(result, "test", verbose=True)
+
+    def test_mcp_internal_tagging(self):
+        """Internal helpers in MCP module → exposure == 'mcp_internal'."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name in self.tools, f"{name} not found; tools={list(self.tools)}"
+            assert self.tools[name].exposure == "mcp_internal", (
+                f"{name}: expected mcp_internal, got {self.tools[name].exposure!r}"
+            )
+
+    def test_mcp_tool_not_reclassified(self):
+        """write_record: @mcp.tool keeps exposure='mcp_tool', not reclassified."""
+        assert "write_record" in self.tools
+        assert self.tools["write_record"].exposure == "mcp_tool", (
+            f"Expected mcp_tool, got {self.tools['write_record'].exposure!r}"
+        )
+
+    def test_default_hides_mcp_internal(self):
+        """Default (verbose=False): mcp_internal helpers are NOT in the output."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name not in self.default_output, (
+                f"{name} must be hidden by default"
+            )
+
+    def test_default_shows_hidden_count(self):
+        """Default output includes '3 internal helpers in MCP modules hidden' line."""
+        assert "internal helpers in MCP modules hidden" in self.default_output, (
+            "Expected hidden-helpers summary line in default output"
+        )
+        assert "3" in self.default_output.split("internal helpers")[0].rsplit("\n", 1)[-1], (
+            "Expected count '3' before the hidden message"
+        )
+
+    def test_verbose_shows_mcp_internal(self):
+        """verbose=True: all mcp_internal helpers appear in output."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name in self.verbose_output, (
+                f"{name} must be shown in verbose output"
+            )
+
+    def test_verbose_no_hidden_line(self):
+        """verbose=True: the 'hidden' summary line must NOT appear."""
+        assert "internal helpers in MCP modules hidden" not in self.verbose_output, (
+            "verbose output must not show the hidden-helpers line"
+        )
