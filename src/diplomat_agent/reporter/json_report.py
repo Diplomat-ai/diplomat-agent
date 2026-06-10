@@ -30,7 +30,12 @@ def _finding(tool: Tool) -> dict:
         "acknowledged": tool.ignored,
         # GATE 3 — contract violation (orthogonal to verdict)
         "contract_violation": tool.contract_violation,
+        # v0.5.2 GATE 3 — exposure tag (mcp_tool / mcp_internal / mcp_client /
+        # internal) and opaque_reason (non-empty when verdict == OPAQUE).
+        "exposure": tool.exposure,
     }
+    if tool.opaque_reason:
+        finding["opaque_reason"] = tool.opaque_reason
     if tool.ignored and tool.ignore_reason:
         finding["acknowledged_reason"] = tool.ignore_reason
     # Include annotation hints when present (additive, omit when None to keep output compact)
