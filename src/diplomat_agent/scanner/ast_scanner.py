@@ -1572,12 +1572,29 @@ def scan_file(
             _dispatcher_node_ids.add(id(_disp_node))
             _handler_locs.update(_hlocs)
         else:
-            # Could not extract any branches — fall back to a single OPAQUE tool
+            # v0.5.2 GATE 2 — zero-branch fallback: emit an OPAQUE Tool for the
+            # dispatcher itself instead of silently falling through to the main
+            # loop. The dispatcher exposes an MCP tool surface whose per-tool
+            # semantics cannot be resolved → honesty demands OPAQUE.
             print(
                 f"\u26a0 low-level MCP dispatcher (@server.call_tool) in {file_path} "
                 f"\u2014 no branches resolved; emitting OPAQUE fallback.",
                 file=sys.stderr,
             )
+            tools.append(Tool(
+                name=_disp_node.name,
+                file=str(file_path),
+                line=_disp_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_internal",
+                exposure_evidence="@*.call_tool dispatcher [unresolved]",
+                opaque_reason=(
+                    "low-level MCP dispatcher with no resolvable if/match branches"
+                ),
+            ))
+            _dispatcher_node_ids.add(id(_disp_node))
 
     _file_path_str = str(file_path)
     for node in ast.walk(tree):
