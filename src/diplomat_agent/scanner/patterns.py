@@ -111,6 +111,73 @@ HELPER_CALL_EXCLUDE_PATTERNS: list[str] = [
     "report_metric", "report_metrics",
 ]
 
+# v0.5.2 GATE 1 — benign call name allow-lists for unresolved-effect-carrier
+# detection. Conservative by design (the spec biases toward OPAQUE when in
+# doubt). Used ONLY by _has_unresolved_effect_carrier to avoid flagging
+# stdlib pure-format / introspection / logging calls.
+BENIGN_BUILTIN_NAMES: frozenset[str] = frozenset({
+    # Type constructors / conversions
+    "bool", "bytes", "bytearray", "complex", "dict", "float", "frozenset",
+    "int", "list", "memoryview", "object", "range", "set", "slice", "str",
+    "tuple", "type",
+    # Predicates / iterables
+    "all", "any", "callable", "isinstance", "issubclass", "hasattr",
+    "iter", "next", "len", "min", "max", "sum", "abs", "divmod",
+    "enumerate", "zip", "filter", "map", "reversed", "sorted",
+    # Conversion / formatting
+    "ascii", "bin", "chr", "format", "hash", "hex", "id", "oct",
+    "ord", "repr", "round", "vars", "dir",
+    # Attribute access (read)
+    "getattr",
+    # Pure data ops
+    "asdict", "astuple", "field",
+    # Standard exception constructors that may appear as raise expr in args
+    "exception",
+})
+
+# Pure attribute methods on stdlib types (str / list / dict / set / tuple).
+# An attribute call whose method name is in this set is treated as benign.
+BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
+    # str methods (all pure)
+    "upper", "lower", "title", "strip", "lstrip", "rstrip",
+    "split", "rsplit", "splitlines", "partition", "rpartition",
+    "join", "replace",
+    "startswith", "endswith", "count", "encode", "decode",
+    "format", "format_map", "casefold", "capitalize", "swapcase",
+    "zfill", "expandtabs", "ljust", "rjust", "center",
+    "isalpha", "isalnum", "isdigit", "isdecimal", "isnumeric",
+    "isspace", "istitle", "isupper", "islower", "isprintable",
+    "isidentifier", "isascii",
+    # dict / list / set read methods
+    "keys", "values", "items", "copy",
+    # json / serialization (no I/O)
+    "dumps", "loads",
+    # pathlib / Path joinpath (pure path math)
+    "joinpath",
+    # ast / typing / inspect introspection
+    "unparse", "parse",
+    # find / index — string lookups (pure read)
+    "find", "rfind", "index", "rindex",
+})
+
+# Benign receiver/object names — attribute calls on these receivers are
+# considered observability / pure-stdlib and excluded from carrier flagging.
+BENIGN_RECEIVERS: frozenset[str] = frozenset({
+    # Logging / observability
+    "logger", "log", "logging",
+    "ctx", "context", "tracer", "span", "meter", "metrics",
+    "telemetry", "audit",
+    # Stdlib pure modules (no I/O unless explicit attr we recognize)
+    "time", "datetime", "math", "random",
+    "json", "yaml", "toml", "csv", "re", "base64", "hashlib", "uuid",
+    "itertools", "functools", "collections", "typing", "dataclasses",
+    "enum", "abc", "copy", "warnings", "ast", "inspect",
+    # Path types — actual writes carry recognized signatures (Path.write_text,
+    # Path.unlink, …) which the SideEffectVisitor catches. The receiver Name
+    # alone is benign.
+    "path", "pathlib",
+})
+
 SIDE_EFFECT_PATTERNS: list[dict] = [
     # -----------------------------------------------------------------------
     # Payment / Financial

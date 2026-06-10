@@ -123,3 +123,70 @@ class TestMcpLowLevel:
         """@server.call_tool dispatcher in an MCP module whose branches cannot be resolved
         keeps exposure='mcp_internal' (reclassified from 'internal' by GATE 6)."""
         assert self.tools["handle_tool"].exposure == "mcp_internal"
+
+
+# ---------------------------------------------------------------------------
+# 6. GATE 1 — étage 1 OPAQUE floor for unresolved effect-carriers
+# ---------------------------------------------------------------------------
+
+
+class TestWrappedDbToolOpaque:
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "wrapped_db_tool.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_run_query_detected(self):
+        assert "run_query" in self.tools
+
+    def test_run_query_verdict_is_opaque(self):
+        assert self.tools["run_query"].verdict == "OPAQUE"
+
+    def test_run_query_opaque_reason_mentions_execute_query(self):
+        assert "execute_query" in self.tools["run_query"].opaque_reason
+
+    def test_run_query_exposure_is_mcp_tool(self):
+        assert self.tools["run_query"].exposure == "mcp_tool"
+
+
+class TestWrappedSocketToolOpaque:
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "wrapped_socket_tool.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_do_thing_detected(self):
+        assert "do_thing" in self.tools
+
+    def test_do_thing_verdict_is_opaque(self):
+        assert self.tools["do_thing"].verdict == "OPAQUE"
+
+    def test_do_thing_opaque_reason_mentions_send_command(self):
+        assert "send_command" in self.tools["do_thing"].opaque_reason
+
+
+class TestPureToolNotOpaque:
+    """GATE 1 negative: pure @mcp.tool with no external calls must NOT be OPAQUE."""
+
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "pure_tool.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_add_not_opaque(self):
+        # Either dropped entirely (no side effect) or surfaced as non-OPAQUE.
+        if "add" in self.tools:
+            assert self.tools["add"].verdict != "OPAQUE"
+
+
+class TestReadonlyLoggingToolNotOpaque:
+    """GATE 1 negative: read-only logging tool must NOT be OPAQUE."""
+
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "readonly_logging_tool.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_status_not_opaque(self):
+        if "status" in self.tools:
+            assert self.tools["status"].verdict != "OPAQUE"
