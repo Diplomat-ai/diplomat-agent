@@ -14,6 +14,9 @@ from pathlib import Path
 from diplomat_agent.models import Guard, SideEffect, Tool
 from diplomat_agent.scanner.interprocedural import PackageIndex
 from diplomat_agent.scanner.patterns import (
+    BENIGN_ATTR_METHODS,
+    BENIGN_BUILTIN_NAMES,
+    BENIGN_RECEIVERS,
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
@@ -445,6 +448,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         self.file_path = file_path
         self.side_effects: list[SideEffect] = []
         self._seen: set[tuple[str, int]] = set()  # dedup by (category, line)
+        # v0.5.2 GATE 1 — ids of Call nodes that matched a SIDE_EFFECT_PATTERN
+        # OR were filtered out as reader-prefix calls (both are "accounted for"
+        # by the scanner and must not be re-flagged as unresolved carriers).
+        self.recognized_call_ids: set[int] = set()
 
     def visit_Call(self, node: ast.Call) -> None:
         # Pre-compute call parts ONCE; pass to _matches_pattern to avoid
@@ -458,6 +465,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         if obj_name and attr_name and any(
             attr_name.startswith(p) for p in READER_METHOD_PREFIXES
         ):
+            # v0.5.2 GATE 1 — reader-prefix calls are intentionally accounted
+            # for (treated as read-only), so they do not count as unresolved
+            # effect-carriers in _has_unresolved_effect_carrier.
+            self.recognized_call_ids.add(id(node))
             self.generic_visit(node)
             return
         # Dispatch: only check patterns where attr_exact matches (or no
@@ -483,6 +494,9 @@ class _SideEffectVisitor(ast.NodeVisitor):
                 _obj=obj_name,
                 _attr=attr_name,
             ):
+                # v0.5.2 GATE 1 — record this Call as pattern-recognised so
+                # that _has_unresolved_effect_carrier won't double-count it.
+                self.recognized_call_ids.add(id(node))
                 key = (pattern["category"], node.lineno)
                 if key not in self._seen:
                     self._seen.add(key)
@@ -1067,6 +1081,72 @@ def _parse_tool_annotations(decorator: ast.Call) -> "tuple[bool | None, bool | N
     return readonly, destructive
 
 
+# ---------------------------------------------------------------------------
+# v0.5.2 GATE 1 — Unresolved-effect-carrier detection (étage 1 honesty floor)
+# ---------------------------------------------------------------------------
+# Goal: a tool whose effect surface we cannot resolve must surface as OPAQUE,
+# never vanish, never read as clean. Returns the source-evidence of the first
+# call that looks like an effect-carrier we did not account for, or None when
+# the body is genuinely pure / only contains accounted-for calls.
+#
+# Bias: when in doubt, treat the call as an unresolved carrier (return its
+# source). Negative fixtures (pure_tool, readonly_logging_tool) gate the
+# conservative end via _BENIGN_* allow-lists; benchmark GATE 7 gates the
+# permissive end via FP=STOP.
+def _has_unresolved_effect_carrier(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    recognized_call_ids: set[int],
+    source_lines: list[str],
+) -> str | None:
+    """Return source-evidence of the first unresolved effect-carrier Call, or None."""
+    # Walk only the function body, not the decorator list — decorators like
+    # @mcp.tool() would otherwise be mistaken for effect carriers.
+    body_calls: list[ast.Call] = []
+    for stmt in func_node.body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                body_calls.append(node)
+    for node in body_calls:
+        if id(node) in recognized_call_ids:
+            continue
+        _full, obj, attr = _call_parts(node)
+
+        # Attribute call (obj.method(), self.method(), a.b.c())
+        if isinstance(node.func, ast.Attribute):
+            if attr in BENIGN_ATTR_METHODS:
+                continue
+            if attr and any(attr.startswith(p) for p in READER_METHOD_PREFIXES):
+                continue
+            if _is_excluded_helper_name(attr):
+                continue
+            # Receiver-based skip: logger.*, ctx.*, json.*, os.path.*, …
+            if obj:
+                obj_first = obj.split(".", 1)[0]
+                obj_last = obj.rsplit(".", 1)[-1]
+                if obj_first in BENIGN_RECEIVERS or obj_last in BENIGN_RECEIVERS:
+                    continue
+                if obj in BENIGN_RECEIVERS:
+                    continue
+            # Unresolved attribute call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+        # Bare Name call: foo(...)
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+            low = name.lower()
+            if low in BENIGN_BUILTIN_NAMES:
+                continue
+            if _is_excluded_helper_name(low):
+                continue
+            # PascalCase: likely class/exception constructor — skip (bias against FP).
+            if name and name[0].isupper():
+                continue
+            # Unresolved bare-Name call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+    return None
+
+
 def _analyze_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     source_lines: list[str],
@@ -1084,6 +1164,10 @@ def _analyze_function(
     for stmt in func_node.body:
         se_visitor.visit(stmt)
     side_effects = list(se_visitor.side_effects)
+    # v0.5.2 GATE 1 — track Call ids the scanner has accounted for. Starts
+    # with the pattern-recognised + reader-prefix-suppressed calls; we add
+    # interproc-resolved sub_calls below.
+    recognized_call_ids: set[int] = set(se_visitor.recognized_call_ids)
 
     # --- FIX A v1 (v0.5.0): inter-procedural side-effect / guard tracing ---
     # Walk eligible sub-calls of the function body (return-value-used only)
@@ -1108,8 +1192,10 @@ def _analyze_function(
             )
             if extra_se:
                 side_effects.extend(extra_se)
+                recognized_call_ids.add(id(sub_call))
             if extra_g:
                 interproc_guards.extend(extra_g)
+                recognized_call_ids.add(id(sub_call))
 
     # FIX A v1 dedup — keyed on (file, category, line) to support multi-file
     # tracing without artificial double-counting.
@@ -1131,6 +1217,40 @@ def _analyze_function(
     is_mcp_client_proxy = module_is_mcp_client and _has_mcp_client_call_tool(func_node)
 
     if not side_effects and not is_mcp_client_proxy:
+        # v0.5.2 GATE 1 — étage 1 honesty floor: an MCP-exposed function whose
+        # effect surface we cannot resolve becomes OPAQUE, never None. A non-MCP
+        # internal helper with no detected effects still drops (no noise).
+        if module_is_mcp:
+            carrier_src = _has_unresolved_effect_carrier(
+                func_node, recognized_call_ids, source_lines
+            )
+            if carrier_src is not None:
+                # Pre-compute exposure (mcp_tool via decorator/programmatic,
+                # else mcp_internal). Mirrors the post-guard logic below.
+                op_exposure = "mcp_internal"
+                op_evidence = ""
+                for dec in func_node.decorator_list:
+                    dec_unparsed = ast.unparse(dec)
+                    dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
+                    if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
+                        op_exposure = "mcp_tool"
+                        op_evidence = "@" + dec_unparsed[:80]
+                        break
+                if op_exposure == "mcp_internal" and programmatic_mcp_tools:
+                    if func_node.name in programmatic_mcp_tools:
+                        op_exposure = "mcp_tool"
+                        op_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
+                return Tool(
+                    name=func_node.name,
+                    file=file_path,
+                    line=func_node.lineno,
+                    params=[],
+                    side_effects=[],
+                    guards=[],
+                    exposure=op_exposure,
+                    exposure_evidence=op_evidence,
+                    opaque_reason=f"effect surface behind unresolved call: {carrier_src}",
+                )
         return None
 
     # --- Filter out pure read-only functions ---
