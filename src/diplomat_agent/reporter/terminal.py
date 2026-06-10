@@ -181,8 +181,14 @@ def render_plain(
     scanned_path: str,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> str:
-    """Render the full report as plain text."""
+    """Render the full report as plain text.
+
+    Args:
+        verbose: If False (default), mcp_internal helpers are hidden and a
+            summary line is shown instead.  Pass True to show all tools.
+    """
     buf = StringIO()
 
     def w(line: str = "") -> None:
@@ -211,8 +217,15 @@ def render_plain(
         w("No tools with side effects detected.")
         w()
     else:
+        hidden = 0
         for tool in result.tools:
+            if not verbose and tool.exposure == "mcp_internal":
+                hidden += 1
+                continue
             w(_plain_tool_block(tool))
+            w()
+        if hidden:
+            w(f"… {hidden} internal helpers in MCP modules hidden — run with --verbose to show")
             w()
 
     w("─" * 40)
@@ -267,8 +280,13 @@ def _render_rich(
     scanned_path: str,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> None:
-    """Render the report using rich formatting."""
+    """Render the report using rich formatting.
+
+    Args:
+        verbose: If False (default), mcp_internal helpers are hidden.
+    """
     console = Console()
 
     console.print()
@@ -291,8 +309,18 @@ def _render_rich(
         )
         console.print()
 
+    hidden = 0
     for tool in result.tools:
+        if not verbose and tool.exposure == "mcp_internal":
+            hidden += 1
+            continue
         _render_rich_tool(console, tool)
+        console.print()
+    if hidden:
+        console.print(
+            f"[dim]… {hidden} internal helpers in MCP modules hidden — "
+            f"run with --verbose to show[/dim]"
+        )
         console.print()
 
     console.rule(style="dim")
@@ -409,6 +437,7 @@ def print_report(
     file=None,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> None:
     """Print the governance report to stdout (or a file handle).
 
@@ -421,6 +450,7 @@ def print_report(
             and non-empty, an auto-surface header is shown before tool blocks.
         file_stats: Stats from the scanner (files_scanned, files_unparsed, etc.).
             If provided, unparsed-file warnings are appended to the report.
+        verbose: If False (default), mcp_internal helpers are hidden in terminal output.
     """
     if file is None:
         file = sys.stdout
@@ -428,7 +458,13 @@ def print_report(
     should_use_rich = _RICH_AVAILABLE if use_rich is None else (use_rich and _RICH_AVAILABLE)
 
     if should_use_rich and file is sys.stdout:
-        _render_rich(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
+        _render_rich(
+            result, scanned_path, mcp_summary=mcp_summary,
+            file_stats=file_stats, verbose=verbose,
+        )
     else:
-        output = render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
+        output = render_plain(
+            result, scanned_path, mcp_summary=mcp_summary,
+            file_stats=file_stats, verbose=verbose,
+        )
         file.write(output)

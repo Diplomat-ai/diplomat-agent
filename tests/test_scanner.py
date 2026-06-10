@@ -1079,3 +1079,73 @@ class TestGate5DispatcherMatchCase:
         assert tool.opaque_reason == "", (
             f"opaque_reason must be empty for resolved handler; got {tool.opaque_reason!r}"
         )
+
+
+class TestGate6McpInternal:
+    """GATE 6 — exposure=mcp_internal tagging + terminal folding."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        from diplomat_agent.reporter.terminal import render_plain
+        from diplomat_agent.models import ScanResult
+
+        fixture = Path(__file__).parent / "fixtures" / "mcp_module_with_helpers.py"
+        pkg = PackageIndex(fixture.parent)
+        raw = scan_file(fixture, package_index=pkg)
+        apply_verdicts(raw)
+        cls.tools = {t.name: t for t in raw}
+
+        result = ScanResult(tools=raw, scenarios=[], summary={
+            "total_tools": len(raw), "unguarded": 0, "partially_guarded": 0,
+            "guarded": 0, "low_risk": 0, "opaque": 0,
+        })
+        cls.default_output = render_plain(result, "test", verbose=False)
+        cls.verbose_output = render_plain(result, "test", verbose=True)
+
+    def test_mcp_internal_tagging(self):
+        """Internal helpers in MCP module → exposure == 'mcp_internal'."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name in self.tools, f"{name} not found; tools={list(self.tools)}"
+            assert self.tools[name].exposure == "mcp_internal", (
+                f"{name}: expected mcp_internal, got {self.tools[name].exposure!r}"
+            )
+
+    def test_mcp_tool_not_reclassified(self):
+        """write_record: @mcp.tool keeps exposure='mcp_tool', not reclassified."""
+        assert "write_record" in self.tools
+        assert self.tools["write_record"].exposure == "mcp_tool", (
+            f"Expected mcp_tool, got {self.tools['write_record'].exposure!r}"
+        )
+
+    def test_default_hides_mcp_internal(self):
+        """Default (verbose=False): mcp_internal helpers are NOT in the output."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name not in self.default_output, (
+                f"{name} must be hidden by default"
+            )
+
+    def test_default_shows_hidden_count(self):
+        """Default output includes '3 internal helpers in MCP modules hidden' line."""
+        assert "internal helpers in MCP modules hidden" in self.default_output, (
+            "Expected hidden-helpers summary line in default output"
+        )
+        assert "3" in self.default_output.split("internal helpers")[0].rsplit("\n", 1)[-1], (
+            "Expected count '3' before the hidden message"
+        )
+
+    def test_verbose_shows_mcp_internal(self):
+        """verbose=True: all mcp_internal helpers appear in output."""
+        for name in ("_helper_a", "_helper_b", "_helper_c"):
+            assert name in self.verbose_output, (
+                f"{name} must be shown in verbose output"
+            )
+
+    def test_verbose_no_hidden_line(self):
+        """verbose=True: the 'hidden' summary line must NOT appear."""
+        assert "internal helpers in MCP modules hidden" not in self.verbose_output, (
+            "verbose output must not show the hidden-helpers line"
+        )

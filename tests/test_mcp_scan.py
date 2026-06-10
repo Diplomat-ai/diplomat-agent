@@ -119,7 +119,7 @@ class TestMcpLowLevel:
         """Dispatcher body has os.remove → detected as tool with side effect."""
         assert "handle_tool" in self.tools
 
-    def test_handle_tool_exposure_is_internal(self):
-        """@server.call_tool is not in MCP_TOOL_DECORATOR_ATTRS.
-        Per-tool exposure is not set; a stderr warning is emitted instead."""
-        assert self.tools["handle_tool"].exposure == "internal"
+    def test_handle_tool_exposure_is_mcp_internal(self):
+        """@server.call_tool dispatcher in an MCP module whose branches cannot be resolved
+        keeps exposure='mcp_internal' (reclassified from 'internal' by GATE 6)."""
+        assert self.tools["handle_tool"].exposure == "mcp_internal"
