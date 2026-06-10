@@ -1239,6 +1239,14 @@ def _analyze_function(
                 exposure = "mcp_tool"
                 exposure_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
 
+    # GATE 6 — reclassify internal helpers inside MCP modules as mcp_internal so
+    # the terminal reporter can fold them by default (--verbose to expand).
+    # This is a presentation-only change: JSON does not serialize "internal" or
+    # "mcp_internal" exposure values (only "mcp_tool" is serialised), so JSON
+    # output is byte-identical regardless of this reclassification.
+    if exposure == "internal" and module_is_mcp:
+        exposure = "mcp_internal"
+
     # --- Detect # diplomat:ok / # canary:ok / # checked:ok inline comments ---
     ignored = False
     ignore_reason = ""
