@@ -723,6 +723,42 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
             "attr_exact": ["invoke", "ainvoke"],
         },
     },
+
+    # -----------------------------------------------------------------------
+    # v0.5.2 GATE 6 — narrow SDK verb breadth additions.
+    # These are high-signal, receiver-agnostic verbs that distinctly indicate a
+    # side effect on their own. attr_exact only — keeps the false-positive
+    # surface small. Each verb is documented with its primary SDK source.
+    # -----------------------------------------------------------------------
+    {
+        # asyncpg, psycopg, sqlalchemy async driver — parameterised query exec.
+        # Treated as database_write because parameter binding is the common
+        # pattern for INSERT / UPDATE / DELETE statements; honest floor lets
+        # the OPAQUE path catch the few read-only cases.
+        "category": "database_write",
+        "risk": 2,
+        "match": {
+            "attr_exact": ["execute_query", "execute_param_query"],
+        },
+    },
+    {
+        # Raw socket / SSH client / RPC channel writes. sendall is unambiguous
+        # (no read variant); send_command on a transport is always egress.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["sendall", "send_command"],
+        },
+    },
+    {
+        # AWS Step Functions / Temporal / Argo workflows — kicks off a remote
+        # state machine that runs unsupervised. Irreversible once started.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["start_execution"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------

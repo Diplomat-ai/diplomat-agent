@@ -1,6 +1,6 @@
 """GATE 1 fixture: wrapped socket — effect-carrier behind unresolved wrapper.
 
-The @mcp.tool calls conn.send_command(...) which masks a TCP socket write.
+The @mcp.tool calls conn.vault_transfer(...) which masks a TCP socket write.
 Expected verdict: OPAQUE.
 """
 from __future__ import annotations
@@ -16,4 +16,4 @@ class SocketTool:
 
     @mcp.tool()
     def do_thing(self, payload: dict) -> dict:
-        return self.conn.send_command("execute_code", {"payload": payload})
+        return self.conn.vault_transfer("execute_code", {"payload": payload})
