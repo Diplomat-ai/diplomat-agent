@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "diplomat-agent"
-version = "0.5.1"
+version = "0.5.2"
 description = "Scan your agentic codebase for unguarded tool calls with real-world side effects"
 readme = "README.md"
 license = { text = "Apache-2.0" }

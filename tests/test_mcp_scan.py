@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from diplomat_agent.analyzer.guards import apply_verdicts
 from diplomat_agent.scanner.ast_scanner import scan_file
 from diplomat_agent.scanner.interprocedural import PackageIndex
-from diplomat_agent.analyzer.guards import apply_verdicts
 
 MCP_FIXTURES = Path(__file__).parent / "fixtures" / "mcp"
 
