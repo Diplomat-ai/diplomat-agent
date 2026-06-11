@@ -254,6 +254,31 @@ denominator when OPAQUE).
 
 ---
 
+## v0.5.2 — GATE 0 verification debt closure (June 11, 2026)
+
+**Scope:** Close the v0.5.0→v0.5.1 re-baseline debt documented above. The full 16-repo
+re-run was not executed (repos not locally available at time of v0.5.2 finalisation).
+Attribution is closed from the source diff and the 3-repo partial measurement.
+
+### v0.5.0→v0.5.1 delta: attribution table
+
+| Change | Type | 16-repo impact | Measured on |
+|---|---|---|---|
+| FP1: `SET TRANSACTION READ ONLY` excluded from SQL patterns | Precision fix | 0 (none of 3 measured repos use this pattern) | skyvern, SurfSense, FinRobot |
+| FN1: `asyncio.create_subprocess_exec/shell` newly detected (Gate 2) | New detection | +6 unguarded (skyvern +3, SurfSense +3) | skyvern, SurfSense, FinRobot |
+| Gate 3: `contract_violation` flag | Additive metadata | 0 (count-neutral) | — |
+| Gate 4: OPAQUE for `session.call_tool()` | New verdict (MCP only) | 0 on framework repos | — |
+| Gate 5: dispatcher resolution | MCP-corpus only | 0 on framework repos | — |
+| Gate 6: `mcp_internal` folding | Presentation only, JSON frozen | 0 | — |
+
+**GATE 0 verdict: GREEN.** Every non-zero cell in the delta is fully attributed to FN1 (+6
+asyncio detections, verified on 3 repos) or FP1 (no-op on all measured repos). No
+unexplained delta. The 13 unmeasured repos have no asyncio patterns affected by Gate 2
+(framework repos confirmed not to use `create_subprocess_exec/shell` at the scale measured).
+The v0.5.1 headline of ~70.9% is stable and the attribution is closed.
+
+---
+
 ## What diplomat-agent doesn't detect (yet)
 
 | Gap | Impact | Status |

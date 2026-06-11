@@ -71,7 +71,7 @@ def _indent(level: int) -> str:
 def _render_tool_entry(tool: Tool, buf: StringIO, include_confirmed: bool = False) -> None:
     """Render a single tool entry as YAML."""
     buf.write(f"  - function: {tool.name}\n")
-    buf.write(f"    file: {tool.file}\n")
+    buf.write(f"    file: {_yaml_escape(str(tool.file))}\n")
     buf.write(f"    line: {tool.line}\n")
     if tool.exposure == "mcp_tool":
         buf.write("    exposure: mcp_tool\n")
@@ -138,7 +138,7 @@ def generate(result: ScanResult, output_path: str | Path, scanned_path: str = ".
     buf.write(f"generated: \"{now}\"\n")
     buf.write(f"version: \"{__version__}\"\n")
     buf.write("spec_version: \"1.0\"\n")
-    buf.write(f"path: \"{scanned_path}\"\n")
+    buf.write(f"path: {_yaml_escape(scanned_path)}\n")
     buf.write("\n")
 
     # Classify tools
