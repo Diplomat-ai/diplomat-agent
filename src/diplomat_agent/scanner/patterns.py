@@ -111,6 +111,73 @@ HELPER_CALL_EXCLUDE_PATTERNS: list[str] = [
     "report_metric", "report_metrics",
 ]
 
+# v0.5.2 GATE 1 — benign call name allow-lists for unresolved-effect-carrier
+# detection. Conservative by design (the spec biases toward OPAQUE when in
+# doubt). Used ONLY by _has_unresolved_effect_carrier to avoid flagging
+# stdlib pure-format / introspection / logging calls.
+BENIGN_BUILTIN_NAMES: frozenset[str] = frozenset({
+    # Type constructors / conversions
+    "bool", "bytes", "bytearray", "complex", "dict", "float", "frozenset",
+    "int", "list", "memoryview", "object", "range", "set", "slice", "str",
+    "tuple", "type",
+    # Predicates / iterables
+    "all", "any", "callable", "isinstance", "issubclass", "hasattr",
+    "iter", "next", "len", "min", "max", "sum", "abs", "divmod",
+    "enumerate", "zip", "filter", "map", "reversed", "sorted",
+    # Conversion / formatting
+    "ascii", "bin", "chr", "format", "hash", "hex", "id", "oct",
+    "ord", "repr", "round", "vars", "dir",
+    # Attribute access (read)
+    "getattr",
+    # Pure data ops
+    "asdict", "astuple", "field",
+    # Standard exception constructors that may appear as raise expr in args
+    "exception",
+})
+
+# Pure attribute methods on stdlib types (str / list / dict / set / tuple).
+# An attribute call whose method name is in this set is treated as benign.
+BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
+    # str methods (all pure)
+    "upper", "lower", "title", "strip", "lstrip", "rstrip",
+    "split", "rsplit", "splitlines", "partition", "rpartition",
+    "join", "replace",
+    "startswith", "endswith", "count", "encode", "decode",
+    "format", "format_map", "casefold", "capitalize", "swapcase",
+    "zfill", "expandtabs", "ljust", "rjust", "center",
+    "isalpha", "isalnum", "isdigit", "isdecimal", "isnumeric",
+    "isspace", "istitle", "isupper", "islower", "isprintable",
+    "isidentifier", "isascii",
+    # dict / list / set read methods
+    "keys", "values", "items", "copy",
+    # json / serialization (no I/O)
+    "dumps", "loads",
+    # pathlib / Path joinpath (pure path math)
+    "joinpath",
+    # ast / typing / inspect introspection
+    "unparse", "parse",
+    # find / index — string lookups (pure read)
+    "find", "rfind", "index", "rindex",
+})
+
+# Benign receiver/object names — attribute calls on these receivers are
+# considered observability / pure-stdlib and excluded from carrier flagging.
+BENIGN_RECEIVERS: frozenset[str] = frozenset({
+    # Logging / observability
+    "logger", "log", "logging",
+    "ctx", "context", "tracer", "span", "meter", "metrics",
+    "telemetry", "audit",
+    # Stdlib pure modules (no I/O unless explicit attr we recognize)
+    "time", "datetime", "math", "random",
+    "json", "yaml", "toml", "csv", "re", "base64", "hashlib", "uuid",
+    "itertools", "functools", "collections", "typing", "dataclasses",
+    "enum", "abc", "copy", "warnings", "ast", "inspect",
+    # Path types — actual writes carry recognized signatures (Path.write_text,
+    # Path.unlink, …) which the SideEffectVisitor catches. The receiver Name
+    # alone is benign.
+    "path", "pathlib",
+})
+
 SIDE_EFFECT_PATTERNS: list[dict] = [
     # -----------------------------------------------------------------------
     # Payment / Financial
@@ -654,6 +721,42 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         "match": {
             "obj_contains": ["llm", "model"],
             "attr_exact": ["invoke", "ainvoke"],
+        },
+    },
+
+    # -----------------------------------------------------------------------
+    # v0.5.2 GATE 6 — narrow SDK verb breadth additions.
+    # These are high-signal, receiver-agnostic verbs that distinctly indicate a
+    # side effect on their own. attr_exact only — keeps the false-positive
+    # surface small. Each verb is documented with its primary SDK source.
+    # -----------------------------------------------------------------------
+    {
+        # asyncpg, psycopg, sqlalchemy async driver — parameterised query exec.
+        # Treated as database_write because parameter binding is the common
+        # pattern for INSERT / UPDATE / DELETE statements; honest floor lets
+        # the OPAQUE path catch the few read-only cases.
+        "category": "database_write",
+        "risk": 2,
+        "match": {
+            "attr_exact": ["execute_query", "execute_param_query"],
+        },
+    },
+    {
+        # Raw socket / SSH client / RPC channel writes. sendall is unambiguous
+        # (no read variant); send_command on a transport is always egress.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["sendall", "send_command"],
+        },
+    },
+    {
+        # AWS Step Functions / Temporal / Argo workflows — kicks off a remote
+        # state machine that runs unsupervised. Irreversible once started.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["start_execution"],
         },
     },
 ]

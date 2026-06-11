@@ -877,10 +877,20 @@ class TestContractViolation:
         )
 
     def test_readonly_no_write_is_clean(self):
-        """safe_read: readOnlyHint=True with no writes → contract_violation NONE."""
-        # safe_read has no write side effects → scan_file returns None → not in tools dict
-        assert "safe_read" not in self.tools, (
-            "safe_read has no writes; scan_file should not return it as a Tool"
+        """safe_read: readOnlyHint=True calling conn.fetch (unresolved wrapper).
+
+        Under GATE 1 (étage 1 honesty floor), a tool with an unresolved
+        effect-carrier in its body is surfaced as OPAQUE — we cannot prove it
+        is read-only without resolving the wrapper. contract_violation must
+        remain NONE (we don't detect a write).
+        """
+        assert "safe_read" in self.tools, (
+            "safe_read has unresolved conn.fetch; GATE 1 must surface it"
+        )
+        tool = self.tools["safe_read"]
+        assert tool.verdict == "OPAQUE", f"expected OPAQUE, got {tool.verdict!r}"
+        assert tool.contract_violation == "NONE", (
+            f"expected NONE, got {tool.contract_violation!r}"
         )
 
 
@@ -921,6 +931,17 @@ class TestGate4McpClient:
         )
         assert tool.verdict == "OPAQUE", (
             f"Expected verdict='OPAQUE', got {tool.verdict!r}"
+        )
+
+    def test_mcp_client_has_default_opaque_reason(self):
+        """GATE 3 — mcp_client proxies must carry a non-empty opaque_reason
+        explaining why the verdict is OPAQUE."""
+        tool = self.tools["call_remote_tool"]
+        assert tool.opaque_reason, (
+            f"mcp_client must have non-empty opaque_reason; got {tool.opaque_reason!r}"
+        )
+        assert "mcp_client" in tool.opaque_reason or "remote" in tool.opaque_reason, (
+            f"opaque_reason should mention mcp_client / remote; got {tool.opaque_reason!r}"
         )
 
     def test_innocent_helper_excluded(self):

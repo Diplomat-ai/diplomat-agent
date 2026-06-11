@@ -14,6 +14,9 @@ from pathlib import Path
 from diplomat_agent.models import Guard, SideEffect, Tool
 from diplomat_agent.scanner.interprocedural import PackageIndex
 from diplomat_agent.scanner.patterns import (
+    BENIGN_ATTR_METHODS,
+    BENIGN_BUILTIN_NAMES,
+    BENIGN_RECEIVERS,
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
@@ -445,6 +448,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         self.file_path = file_path
         self.side_effects: list[SideEffect] = []
         self._seen: set[tuple[str, int]] = set()  # dedup by (category, line)
+        # v0.5.2 GATE 1 — ids of Call nodes that matched a SIDE_EFFECT_PATTERN
+        # OR were filtered out as reader-prefix calls (both are "accounted for"
+        # by the scanner and must not be re-flagged as unresolved carriers).
+        self.recognized_call_ids: set[int] = set()
 
     def visit_Call(self, node: ast.Call) -> None:
         # Pre-compute call parts ONCE; pass to _matches_pattern to avoid
@@ -458,6 +465,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         if obj_name and attr_name and any(
             attr_name.startswith(p) for p in READER_METHOD_PREFIXES
         ):
+            # v0.5.2 GATE 1 — reader-prefix calls are intentionally accounted
+            # for (treated as read-only), so they do not count as unresolved
+            # effect-carriers in _has_unresolved_effect_carrier.
+            self.recognized_call_ids.add(id(node))
             self.generic_visit(node)
             return
         # Dispatch: only check patterns where attr_exact matches (or no
@@ -483,6 +494,9 @@ class _SideEffectVisitor(ast.NodeVisitor):
                 _obj=obj_name,
                 _attr=attr_name,
             ):
+                # v0.5.2 GATE 1 — record this Call as pattern-recognised so
+                # that _has_unresolved_effect_carrier won't double-count it.
+                self.recognized_call_ids.add(id(node))
                 key = (pattern["category"], node.lineno)
                 if key not in self._seen:
                     self._seen.add(key)
@@ -592,6 +606,103 @@ class _EligibleCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _collect_callee_effects(
+    callee_def: "ast.FunctionDef | ast.AsyncFunctionDef",
+    callee_file: Path,
+    package_index: "PackageIndex",
+    depth: int,
+    max_depth: int,
+    visited: set[tuple[str, str]],
+    source_lines_cache: dict[str, list[str]],
+) -> tuple[list[SideEffect], list[Guard]]:
+    """Collect side-effects + guards from an already-resolved callee FunctionDef.
+
+    Shared back-end used by both _resolve_call_effects (Name-call path) and
+    v0.5.2 GATE 5 _resolve_attr_call_effects (Attribute-call path).
+    """
+    import os as _os
+    try:
+        callee_resolved = callee_file.resolve()
+    except (OSError, ValueError):
+        callee_resolved = callee_file
+    callee_norm = _os.path.normcase(str(callee_resolved))
+    root_norm = _os.path.normcase(str(package_index.root))
+    if not callee_norm.startswith(root_norm):
+        return [], []
+
+    callee_path_str = str(callee_file)
+    visit_key = (callee_path_str, callee_def.name)
+    if visit_key in visited:
+        return [], []
+
+    cache = getattr(package_index, "_effects_cache", None)
+    if cache is not None and visit_key in cache:
+        return cache[visit_key]
+
+    if callee_path_str not in source_lines_cache:
+        try:
+            text = callee_file.read_text(encoding="utf-8-sig", errors="replace")
+            source_lines_cache[callee_path_str] = text.splitlines()
+        except (OSError, UnicodeDecodeError):
+            return [], []
+    callee_lines = source_lines_cache[callee_path_str]
+
+    se_visitor = _SideEffectVisitor(callee_lines, callee_path_str)
+    for stmt in callee_def.body:
+        se_visitor.visit(stmt)
+    callee_side_effects: list[SideEffect] = list(se_visitor.side_effects)
+
+    g_visitor = _GuardVisitor(callee_lines, set())
+    g_visitor.visit(callee_def)
+    callee_guards: list[Guard] = list(g_visitor.guards)
+
+    callee_dec_guards = _detect_decorator_guards(
+        callee_def.decorator_list,
+        callee_lines,
+        from_file=callee_file,
+        package_index=package_index,
+    )
+    callee_guards.extend(callee_dec_guards)
+
+    try:
+        rel = str(callee_file.relative_to(package_index.root))
+    except ValueError:
+        rel = callee_file.name
+    via_label = f"[via {callee_def.name}() @ {rel}:{callee_def.lineno}]"
+    callee_side_effects = [
+        SideEffect(
+            category=se.category,
+            evidence=f"{se.evidence}  {via_label}",
+            line=se.line,
+            file=se.file,
+            type=se.type,
+        )
+        for se in callee_side_effects
+    ]
+
+    new_visited = visited | {visit_key}
+    sub_visitor = _EligibleCallVisitor()
+    for stmt in callee_def.body:
+        sub_visitor.visit(stmt)
+    for sub_call in sub_visitor.calls:
+        sub_se, sub_g = _resolve_call_effects(
+            sub_call,
+            callee_path_str,
+            package_index,
+            depth + 1,
+            max_depth,
+            new_visited,
+            source_lines_cache,
+        )
+        callee_side_effects.extend(sub_se)
+        callee_guards.extend(sub_g)
+
+    if cache is not None:
+        cache[visit_key] = (callee_side_effects, callee_guards)
+
+    return callee_side_effects, callee_guards
+
+
 def _resolve_call_effects(
     call: ast.Call,
     from_file: str,
@@ -637,100 +748,146 @@ def _resolve_call_effects(
     if callee_def is None:
         return [], []
 
-    # Stop at stdlib / third-party (anything outside the package root).
-    # Resolve callee_file to normalise Windows short-paths (GUARNE~1 → guarnelli)
-    # before comparing to package_index.root (which is always the long-path form).
-    import os as _os
-    try:
-        callee_resolved = callee_file.resolve()
-    except (OSError, ValueError):
-        callee_resolved = callee_file
-    callee_norm = _os.path.normcase(str(callee_resolved))
-    root_norm = _os.path.normcase(str(package_index.root))
-    if not callee_norm.startswith(root_norm):
-        return [], []
-
-    callee_path_str = str(callee_file)
-    visit_key = (callee_path_str, callee_def.name)
-
-    # Cycle protection.
-    if visit_key in visited:
-        return [], []
-
-    # Memoization (PackageIndex-scoped cache).
-    cache = getattr(package_index, "_effects_cache", None)
-    if cache is not None and visit_key in cache:
-        return cache[visit_key]
-
-    # Read source lines for the callee file (cached per-scan).
-    if callee_path_str not in source_lines_cache:
-        try:
-            text = callee_file.read_text(encoding="utf-8-sig", errors="replace")
-            source_lines_cache[callee_path_str] = text.splitlines()
-        except (OSError, UnicodeDecodeError):
-            return [], []
-    callee_lines = source_lines_cache[callee_path_str]
-
-    # --- Intra-procedural side effects + body guards of the callee. ---
-    se_visitor = _SideEffectVisitor(callee_lines, callee_path_str)
-    for stmt in callee_def.body:
-        se_visitor.visit(stmt)
-    callee_side_effects: list[SideEffect] = list(se_visitor.side_effects)
-
-    g_visitor = _GuardVisitor(callee_lines, set())
-    g_visitor.visit(callee_def)
-    callee_guards: list[Guard] = list(g_visitor.guards)
-
-    # Decorator guards on the callee (symmetric: a helper decorated with
-    # @auth_required still protects its caller's tool).
-    callee_dec_guards = _detect_decorator_guards(
-        callee_def.decorator_list,
-        callee_lines,
-        from_file=callee_file,
-        package_index=package_index,
+    return _collect_callee_effects(
+        callee_def, callee_file, package_index,
+        depth, max_depth, visited, source_lines_cache,
     )
-    callee_guards.extend(callee_dec_guards)
 
-    # Augment side-effect evidence with [via callee_name() @ file:line].
-    try:
-        rel = str(callee_file.relative_to(package_index.root))
-    except ValueError:
-        rel = callee_file.name
-    via_label = f"[via {callee_def.name}() @ {rel}:{callee_def.lineno}]"
-    callee_side_effects = [
-        SideEffect(
-            category=se.category,
-            evidence=f"{se.evidence}  {via_label}",
-            line=se.line,
-            file=se.file,
-            type=se.type,
-        )
-        for se in callee_side_effects
-    ]
 
-    # --- Recursive descent into eligible sub-calls of the callee. ---
-    new_visited = visited | {visit_key}
-    sub_visitor = _EligibleCallVisitor()
-    for stmt in callee_def.body:
-        sub_visitor.visit(stmt)
-    for sub_call in sub_visitor.calls:
-        sub_se, sub_g = _resolve_call_effects(
-            sub_call,
-            callee_path_str,
-            package_index,
-            depth + 1,
-            max_depth,
-            new_visited,
-            source_lines_cache,
-        )
-        callee_side_effects.extend(sub_se)
-        callee_guards.extend(sub_g)
+# ---------------------------------------------------------------------------
+# v0.5.2 GATE 5 — étage 2 attribute-call interproc (certain-only type tracking)
+# ---------------------------------------------------------------------------
+#
+# Resolve obj.method(...) calls when the class of `obj` can be determined with
+# certainty from one of:
+#   - self.method() inside a class body (enclosing_class known)
+#   - Class.method() (PascalCase Name receiver, ClassDef in scope)
+#   - var: SomeClass annotation on a param or local (AnnAssign)
+#   - var = SomeClass(...) plain assignment in the same function (no reassign)
+#
+# This narrows the OPAQUE floor (GATE 1) when we CAN prove the call resolves
+# inside the package — the wrapper's real side effects are then attributed to
+# the calling tool. Anything uncertain → no resolution → OPAQUE floor applies.
 
-    # Memoize.
-    if cache is not None:
-        cache[visit_key] = (callee_side_effects, callee_guards)
 
-    return callee_side_effects, callee_guards
+def _collect_type_bindings(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> dict[str, str]:
+    """Return {var_name → class_name} for vars whose type can be proven inside func.
+
+    Sources (all conservative, only Name-typed):
+      1. param annotations  def f(x: Foo)              → {"x": "Foo"}
+      2. AnnAssign           x: Foo = ...               → {"x": "Foo"}
+      3. plain Assign        x = Foo(...)               → {"x": "Foo"}
+         (only if Foo is a Name with a leading uppercase letter — heuristic for
+         class constructor; rejects foo(), self.foo(), Foo.bar())
+
+    Reassignment policy: if the same name appears twice with different RHS
+    classes, drop the binding entirely (uncertain).
+    """
+    bindings: dict[str, str] = {}
+    reassigned: set[str] = set()
+
+    # 1. param annotations
+    for arg in (
+        func_node.args.args + func_node.args.posonlyargs + func_node.args.kwonlyargs
+    ):
+        if arg.annotation is not None and isinstance(arg.annotation, ast.Name):
+            bindings[arg.arg] = arg.annotation.id
+
+    # 2 + 3. body assignments (top-level statements only — bias to certainty)
+    for stmt in func_node.body:
+        if isinstance(stmt, ast.AnnAssign):
+            if (
+                isinstance(stmt.target, ast.Name)
+                and isinstance(stmt.annotation, ast.Name)
+            ):
+                name = stmt.target.id
+                if name in bindings and bindings[name] != stmt.annotation.id:
+                    reassigned.add(name)
+                else:
+                    bindings[name] = stmt.annotation.id
+        elif isinstance(stmt, ast.Assign):
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                continue
+            if not isinstance(stmt.value, ast.Call):
+                continue
+            ctor = stmt.value.func
+            if isinstance(ctor, ast.Name) and ctor.id and ctor.id[0].isupper():
+                name = stmt.targets[0].id
+                if name in bindings and bindings[name] != ctor.id:
+                    reassigned.add(name)
+                else:
+                    bindings[name] = ctor.id
+
+    for name in reassigned:
+        bindings.pop(name, None)
+    return bindings
+
+
+def _attr_call_class_method(
+    call: ast.Call,
+    enclosing_class: str | None,
+    type_bindings: dict[str, str],
+) -> tuple[str, str] | None:
+    """Map an obj.method(...) Call to (class_name, method_name), certain-only.
+
+    Returns None when:
+      - call.func is not an Attribute
+      - receiver is not a single Name (chained attrs like a.b.c are rejected)
+      - receiver is not in {self (with enclosing_class), PascalCase, type_bindings}
+    """
+    func = call.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    if not isinstance(func.value, ast.Name):
+        return None
+    recv = func.value.id
+    method = func.attr
+    if not method:
+        return None
+
+    if recv == "self" and enclosing_class:
+        return enclosing_class, method
+    if recv in type_bindings:
+        return type_bindings[recv], method
+    if recv and recv[0].isupper():
+        return recv, method
+    return None
+
+
+def _resolve_attr_call_effects(
+    call: ast.Call,
+    enclosing_class: str | None,
+    type_bindings: dict[str, str],
+    from_file: str,
+    package_index: "PackageIndex | None",
+    depth: int,
+    max_depth: int,
+    visited: set[tuple[str, str]],
+    source_lines_cache: dict[str, list[str]],
+) -> tuple[list[SideEffect], list[Guard]]:
+    """v0.5.2 GATE 5 — attribute-call interproc with certain-only type tracking."""
+    if package_index is None:
+        return [], []
+    if depth >= max_depth:
+        return [], []
+
+    resolved = _attr_call_class_method(call, enclosing_class, type_bindings)
+    if resolved is None:
+        return [], []
+
+    class_name, method_name = resolved
+    method_def, method_file = package_index.lookup_class_method(
+        class_name, method_name, Path(from_file)
+    )
+    if method_def is None:
+        return [], []
+
+    return _collect_callee_effects(
+        method_def, method_file, package_index,
+        depth, max_depth, visited, source_lines_cache,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1067,6 +1224,72 @@ def _parse_tool_annotations(decorator: ast.Call) -> "tuple[bool | None, bool | N
     return readonly, destructive
 
 
+# ---------------------------------------------------------------------------
+# v0.5.2 GATE 1 — Unresolved-effect-carrier detection (étage 1 honesty floor)
+# ---------------------------------------------------------------------------
+# Goal: a tool whose effect surface we cannot resolve must surface as OPAQUE,
+# never vanish, never read as clean. Returns the source-evidence of the first
+# call that looks like an effect-carrier we did not account for, or None when
+# the body is genuinely pure / only contains accounted-for calls.
+#
+# Bias: when in doubt, treat the call as an unresolved carrier (return its
+# source). Negative fixtures (pure_tool, readonly_logging_tool) gate the
+# conservative end via _BENIGN_* allow-lists; benchmark GATE 7 gates the
+# permissive end via FP=STOP.
+def _has_unresolved_effect_carrier(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    recognized_call_ids: set[int],
+    source_lines: list[str],
+) -> str | None:
+    """Return source-evidence of the first unresolved effect-carrier Call, or None."""
+    # Walk only the function body, not the decorator list — decorators like
+    # @mcp.tool() would otherwise be mistaken for effect carriers.
+    body_calls: list[ast.Call] = []
+    for stmt in func_node.body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                body_calls.append(node)
+    for node in body_calls:
+        if id(node) in recognized_call_ids:
+            continue
+        _full, obj, attr = _call_parts(node)
+
+        # Attribute call (obj.method(), self.method(), a.b.c())
+        if isinstance(node.func, ast.Attribute):
+            if attr in BENIGN_ATTR_METHODS:
+                continue
+            if attr and any(attr.startswith(p) for p in READER_METHOD_PREFIXES):
+                continue
+            if _is_excluded_helper_name(attr):
+                continue
+            # Receiver-based skip: logger.*, ctx.*, json.*, os.path.*, …
+            if obj:
+                obj_first = obj.split(".", 1)[0]
+                obj_last = obj.rsplit(".", 1)[-1]
+                if obj_first in BENIGN_RECEIVERS or obj_last in BENIGN_RECEIVERS:
+                    continue
+                if obj in BENIGN_RECEIVERS:
+                    continue
+            # Unresolved attribute call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+        # Bare Name call: foo(...)
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+            low = name.lower()
+            if low in BENIGN_BUILTIN_NAMES:
+                continue
+            if _is_excluded_helper_name(low):
+                continue
+            # PascalCase: likely class/exception constructor — skip (bias against FP).
+            if name and name[0].isupper():
+                continue
+            # Unresolved bare-Name call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+    return None
+
+
 def _analyze_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     source_lines: list[str],
@@ -1077,6 +1300,7 @@ def _analyze_function(
     module_is_mcp_client: bool = False,
     programmatic_mcp_tools: "set[str] | None" = None,
     interproc_source_cache: "dict[str, list[str]] | None" = None,
+    enclosing_class: str | None = None,
 ) -> Tool | None:
     """Analyze a single function/method and return a Tool if it has side effects."""
     # --- Collect intra-procedural side effects (body only, skip decorators) ---
@@ -1084,6 +1308,13 @@ def _analyze_function(
     for stmt in func_node.body:
         se_visitor.visit(stmt)
     side_effects = list(se_visitor.side_effects)
+    # v0.5.2 GATE 1 — track Call ids the scanner has accounted for. Starts
+    # with the pattern-recognised + reader-prefix-suppressed calls; we add
+    # interproc-resolved sub_calls below.
+    recognized_call_ids: set[int] = set(se_visitor.recognized_call_ids)
+
+    # v0.5.2 GATE 5 — certain-only type bindings used by attribute-call interproc.
+    type_bindings = _collect_type_bindings(func_node)
 
     # --- FIX A v1 (v0.5.0): inter-procedural side-effect / guard tracing ---
     # Walk eligible sub-calls of the function body (return-value-used only)
@@ -1108,8 +1339,39 @@ def _analyze_function(
             )
             if extra_se:
                 side_effects.extend(extra_se)
+                recognized_call_ids.add(id(sub_call))
             if extra_g:
                 interproc_guards.extend(extra_g)
+                recognized_call_ids.add(id(sub_call))
+
+        # v0.5.2 GATE 5 — attribute-call interproc (étage 2). Walk attribute
+        # sub-calls whose receiver can be statically typed (self / Class /
+        # annotated var) and pull in their effects + guards just like the
+        # Name-call path above.
+        for sub_call in ast.walk(func_node):
+            if not isinstance(sub_call, ast.Call):
+                continue
+            if not isinstance(sub_call.func, ast.Attribute):
+                continue
+            if id(sub_call) in recognized_call_ids:
+                continue
+            extra_se, extra_g = _resolve_attr_call_effects(
+                sub_call,
+                enclosing_class,
+                type_bindings,
+                file_path,
+                package_index,
+                depth=0,
+                max_depth=_DEFAULT_INTERPROC_DEPTH,
+                visited=set(),
+                source_lines_cache=interproc_source_cache,
+            )
+            if extra_se:
+                side_effects.extend(extra_se)
+                recognized_call_ids.add(id(sub_call))
+            if extra_g:
+                interproc_guards.extend(extra_g)
+                recognized_call_ids.add(id(sub_call))
 
     # FIX A v1 dedup — keyed on (file, category, line) to support multi-file
     # tracing without artificial double-counting.
@@ -1131,6 +1393,40 @@ def _analyze_function(
     is_mcp_client_proxy = module_is_mcp_client and _has_mcp_client_call_tool(func_node)
 
     if not side_effects and not is_mcp_client_proxy:
+        # v0.5.2 GATE 1 — étage 1 honesty floor: an MCP-exposed function whose
+        # effect surface we cannot resolve becomes OPAQUE, never None. A non-MCP
+        # internal helper with no detected effects still drops (no noise).
+        if module_is_mcp:
+            carrier_src = _has_unresolved_effect_carrier(
+                func_node, recognized_call_ids, source_lines
+            )
+            if carrier_src is not None:
+                # Pre-compute exposure (mcp_tool via decorator/programmatic,
+                # else mcp_internal). Mirrors the post-guard logic below.
+                op_exposure = "mcp_internal"
+                op_evidence = ""
+                for dec in func_node.decorator_list:
+                    dec_unparsed = ast.unparse(dec)
+                    dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
+                    if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
+                        op_exposure = "mcp_tool"
+                        op_evidence = "@" + dec_unparsed[:80]
+                        break
+                if op_exposure == "mcp_internal" and programmatic_mcp_tools:
+                    if func_node.name in programmatic_mcp_tools:
+                        op_exposure = "mcp_tool"
+                        op_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
+                return Tool(
+                    name=func_node.name,
+                    file=file_path,
+                    line=func_node.lineno,
+                    params=[],
+                    side_effects=[],
+                    guards=[],
+                    exposure=op_exposure,
+                    exposure_evidence=op_evidence,
+                    opaque_reason=f"effect surface behind unresolved call: {carrier_src}",
+                )
         return None
 
     # --- Filter out pure read-only functions ---
@@ -1291,6 +1587,22 @@ def _analyze_function(
             if ignored:
                 break
 
+    # v0.5.2 GATE 3 — mcp_client proxies must carry a non-empty opaque_reason
+    # so downstream consumers (JSON, registry, terminal) see why the verdict is
+    # OPAQUE. Use the call-site evidence when available, otherwise a generic
+    # default.
+    opaque_reason = ""
+    if exposure == "mcp_client":
+        if exposure_evidence:
+            opaque_reason = (
+                f"mcp_client proxy: remote tool semantics not in scan unit "
+                f"({exposure_evidence})"
+            )
+        else:
+            opaque_reason = (
+                "mcp_client proxy: remote tool semantics not in scan unit"
+            )
+
     tool = Tool(
         name=func_node.name,
         file=file_path,
@@ -1307,6 +1619,7 @@ def _analyze_function(
         exposure_evidence=exposure_evidence,
         readonly_hint=readonly_hint,
         destructive_hint=destructive_hint,
+        opaque_reason=opaque_reason,
     )
     return tool
 
@@ -1411,24 +1724,46 @@ def scan_file(
             if not isinstance(_node, ast.Call):
                 continue
             _func = _node.func
-            if not isinstance(_func, ast.Attribute):
+
+            # Direct form: mcp.add_tool(fn) / mcp.tool(fn).
+            if isinstance(_func, ast.Attribute):
+                if _func.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _func.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
                 continue
-            if _func.attr not in MCP_REGISTRATION_ATTRS:
-                continue
-            # Receiver must be one of MCP_INSTANCE_NAMES (mcp / server / app).
-            _recv = _func.value
-            if not isinstance(_recv, ast.Name):
-                continue
-            if _recv.id.lower() not in MCP_INSTANCE_NAMES:
-                continue
-            if not _node.args:
-                continue
-            _arg0 = _node.args[0]
-            if isinstance(_arg0, ast.Name):
-                programmatic_mcp_tools.add(_arg0.id)
-            elif isinstance(_arg0, ast.Attribute):
-                # Best-effort: foo.bar → bar (last attribute name)
-                programmatic_mcp_tools.add(_arg0.attr)
+
+            # v0.5.2 GATE 4 — curried form: mcp.tool(name=...)(fn).
+            # Outer Call's func is itself a Call(Attribute(mcp, 'tool'), ...).
+            # The outer Call's first positional arg is the registered function.
+            if isinstance(_func, ast.Call):
+                _inner = _func.func
+                if not isinstance(_inner, ast.Attribute):
+                    continue
+                if _inner.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _inner.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
 
     tools: list[Tool] = []
 
@@ -1452,14 +1787,40 @@ def scan_file(
             _dispatcher_node_ids.add(id(_disp_node))
             _handler_locs.update(_hlocs)
         else:
-            # Could not extract any branches — fall back to a single OPAQUE tool
+            # v0.5.2 GATE 2 — zero-branch fallback: emit an OPAQUE Tool for the
+            # dispatcher itself instead of silently falling through to the main
+            # loop. The dispatcher exposes an MCP tool surface whose per-tool
+            # semantics cannot be resolved → honesty demands OPAQUE.
             print(
                 f"\u26a0 low-level MCP dispatcher (@server.call_tool) in {file_path} "
                 f"\u2014 no branches resolved; emitting OPAQUE fallback.",
                 file=sys.stderr,
             )
+            tools.append(Tool(
+                name=_disp_node.name,
+                file=str(file_path),
+                line=_disp_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_internal",
+                exposure_evidence="@*.call_tool dispatcher [unresolved]",
+                opaque_reason=(
+                    "low-level MCP dispatcher with no resolvable if/match branches"
+                ),
+            ))
+            _dispatcher_node_ids.add(id(_disp_node))
 
     _file_path_str = str(file_path)
+    # v0.5.2 GATE 5 — build node-id → enclosing-class map so _analyze_function
+    # can resolve self.method() against the right ClassDef.
+    _enclosing_class_map: dict[int, str] = {}
+    for _cls in ast.walk(tree):
+        if not isinstance(_cls, ast.ClassDef):
+            continue
+        for _item in _cls.body:
+            if isinstance(_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _enclosing_class_map[id(_item)] = _cls.name
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if id(node) in _dispatcher_node_ids:
@@ -1476,6 +1837,7 @@ def scan_file(
                 module_is_mcp_client=module_is_mcp_client,
                 programmatic_mcp_tools=programmatic_mcp_tools,
                 interproc_source_cache=_interproc_cache,
+                enclosing_class=_enclosing_class_map.get(id(node)),
             )
             if tool is not None:
                 tools.append(tool)
