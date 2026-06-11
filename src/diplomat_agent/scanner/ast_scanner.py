@@ -1548,24 +1548,46 @@ def scan_file(
             if not isinstance(_node, ast.Call):
                 continue
             _func = _node.func
-            if not isinstance(_func, ast.Attribute):
+
+            # Direct form: mcp.add_tool(fn) / mcp.tool(fn).
+            if isinstance(_func, ast.Attribute):
+                if _func.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _func.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
                 continue
-            if _func.attr not in MCP_REGISTRATION_ATTRS:
-                continue
-            # Receiver must be one of MCP_INSTANCE_NAMES (mcp / server / app).
-            _recv = _func.value
-            if not isinstance(_recv, ast.Name):
-                continue
-            if _recv.id.lower() not in MCP_INSTANCE_NAMES:
-                continue
-            if not _node.args:
-                continue
-            _arg0 = _node.args[0]
-            if isinstance(_arg0, ast.Name):
-                programmatic_mcp_tools.add(_arg0.id)
-            elif isinstance(_arg0, ast.Attribute):
-                # Best-effort: foo.bar → bar (last attribute name)
-                programmatic_mcp_tools.add(_arg0.attr)
+
+            # v0.5.2 GATE 4 — curried form: mcp.tool(name=...)(fn).
+            # Outer Call's func is itself a Call(Attribute(mcp, 'tool'), ...).
+            # The outer Call's first positional arg is the registered function.
+            if isinstance(_func, ast.Call):
+                _inner = _func.func
+                if not isinstance(_inner, ast.Attribute):
+                    continue
+                if _inner.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _inner.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
 
     tools: list[Tool] = []
 

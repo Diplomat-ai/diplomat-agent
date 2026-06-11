@@ -198,3 +198,30 @@ class TestReadonlyLoggingToolNotOpaque:
     def test_status_not_opaque(self):
         if "status" in self.tools:
             assert self.tools["status"].verdict != "OPAQUE"
+
+
+# ---------------------------------------------------------------------------
+# 7. GATE 4 — dynamic registration mcp.tool(name=...)(fn)
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicRegistration:
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "dynamic_registration_tool.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_lambda_function_detected(self):
+        assert "lambda_function" in self.tools
+
+    def test_lambda_function_exposure_is_mcp_tool(self):
+        """Curried registration mcp.tool(name=...)(fn) must promote the
+        registered function to exposure='mcp_tool'."""
+        assert self.tools["lambda_function"].exposure == "mcp_tool"
+
+    def test_lambda_function_verdict_is_unguarded(self):
+        """os.remove inside the registered function → UNGUARDED."""
+        assert self.tools["lambda_function"].verdict == "UNGUARDED"
+
+    def test_lambda_function_evidence_mentions_programmatic(self):
+        assert "programmatic" in self.tools["lambda_function"].exposure_evidence
