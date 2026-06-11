@@ -151,8 +151,8 @@ class TestWrappedDbToolOpaque:
     def test_run_query_verdict_is_opaque(self):
         assert self.tools["run_query"].verdict == "OPAQUE"
 
-    def test_run_query_opaque_reason_mentions_execute_query(self):
-        assert "execute_query" in self.tools["run_query"].opaque_reason
+    def test_run_query_opaque_reason_mentions_vault_action(self):
+        assert "vault_action" in self.tools["run_query"].opaque_reason
 
     def test_run_query_exposure_is_mcp_tool(self):
         assert self.tools["run_query"].exposure == "mcp_tool"
@@ -170,8 +170,8 @@ class TestWrappedSocketToolOpaque:
     def test_do_thing_verdict_is_opaque(self):
         assert self.tools["do_thing"].verdict == "OPAQUE"
 
-    def test_do_thing_opaque_reason_mentions_send_command(self):
-        assert "send_command" in self.tools["do_thing"].opaque_reason
+    def test_do_thing_opaque_reason_mentions_vault_transfer(self):
+        assert "vault_transfer" in self.tools["do_thing"].opaque_reason
 
 
 class TestPureToolNotOpaque:
@@ -274,6 +274,31 @@ class TestEtage2LocalBinding:
     def test_handler_side_effects_mention_remove(self):
         evidence = " ".join(se.evidence for se in self.tools["handler"].side_effects)
         assert "remove" in evidence
+
+
+class TestGate6SdkVerbs:
+    """GATE 6: narrow SDK verbs (execute_query, sendall, send_command,
+    start_execution, execute_param_query) recognised on any receiver."""
+
+    def setup_method(self):
+        tools = scan_file(MCP_FIXTURES / "gate6_sdk_verbs.py")
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_do_query_unguarded(self):
+        assert self.tools["do_query"].verdict == "UNGUARDED"
+
+    def test_do_param_query_unguarded(self):
+        assert self.tools["do_param_query"].verdict == "UNGUARDED"
+
+    def test_do_sendall_unguarded(self):
+        assert self.tools["do_sendall"].verdict == "UNGUARDED"
+
+    def test_do_send_command_unguarded(self):
+        assert self.tools["do_send_command"].verdict == "UNGUARDED"
+
+    def test_do_start_execution_unguarded(self):
+        assert self.tools["do_start_execution"].verdict == "UNGUARDED"
 
 
 class TestDynamicRegistration:
