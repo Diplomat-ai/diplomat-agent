@@ -814,12 +814,16 @@ def _collect_type_bindings(
             if not isinstance(stmt.value, ast.Call):
                 continue
             ctor = stmt.value.func
+            name = stmt.targets[0].id
             if isinstance(ctor, ast.Name) and ctor.id and ctor.id[0].isupper():
-                name = stmt.targets[0].id
                 if name in bindings and bindings[name] != ctor.id:
                     reassigned.add(name)
                 else:
                     bindings[name] = ctor.id
+            elif name in bindings:
+                # Non-PascalCase call assigned to an already-bound name —
+                # type becomes uncertain; drop the binding.
+                reassigned.add(name)
 
     for name in reassigned:
         bindings.pop(name, None)

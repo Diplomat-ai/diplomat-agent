@@ -1170,3 +1170,100 @@ class TestGate6McpInternal:
         assert "internal helpers in MCP modules hidden" not in self.verbose_output, (
             "verbose output must not show the hidden-helpers line"
         )
+
+
+# ---------------------------------------------------------------------------
+# GATE 2 — étage-2 negative fixtures (no over-propagation guardrail)
+# ---------------------------------------------------------------------------
+
+MCP_FIXTURES_GATE2 = Path(__file__).parent / "fixtures" / "mcp"
+
+
+class TestUntypedWrapperIsOpaque:
+    """GATE 2 negative: untyped `driver` param — étage 2 must not guess type,
+    verdict must be OPAQUE, never UNGUARDED."""
+
+    def setup_method(self):
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        fixture = MCP_FIXTURES_GATE2 / "untyped_wrapper.py"
+        pkg = PackageIndex(fixture.parent)
+        tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_untyped_wrapper_detected(self):
+        assert "t" in self.tools, (
+            f"untyped_wrapper tool 't' not found; got {list(self.tools)}"
+        )
+
+    def test_untyped_wrapper_is_opaque(self):
+        """Untyped driver → cannot resolve do_custom → OPAQUE."""
+        assert self.tools["t"].verdict == "OPAQUE", (
+            f"Expected OPAQUE for untyped driver, got {self.tools['t'].verdict!r}"
+        )
+
+    def test_untyped_wrapper_not_unguarded(self):
+        assert self.tools["t"].verdict != "UNGUARDED", (
+            "Untyped driver must NEVER resolve to UNGUARDED via type guessing"
+        )
+
+
+class TestReassignedVarNotResolved:
+    """GATE 2 negative: `r = Reader(); r = get_writer(); r.flush()` — the
+    reassigned `r` type is uncertain, so étage-2 must not type-resolve it.
+    Verdict must be OPAQUE, never UNGUARDED."""
+
+    def setup_method(self):
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+        fixture = MCP_FIXTURES_GATE2 / "reassigned_var.py"
+        pkg = PackageIndex(fixture.parent)
+        tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_reassigned_var_detected(self):
+        assert "handler" in self.tools, (
+            f"reassigned_var tool 'handler' not found; got {list(self.tools)}"
+        )
+
+    def test_reassigned_var_is_opaque(self):
+        """Reassigned receiver → type uncertain → OPAQUE."""
+        assert self.tools["handler"].verdict == "OPAQUE", (
+            f"Expected OPAQUE for reassigned receiver, got {self.tools['handler'].verdict!r}"
+        )
+
+    def test_reassigned_var_not_unguarded(self):
+        assert self.tools["handler"].verdict != "UNGUARDED", (
+            "Reassigned receiver must NEVER resolve to UNGUARDED"
+        )
+
+
+class TestEtage2PositivesStillUnguarded:
+    """GATE 2 regression: the étage-2 positives must still resolve to UNGUARDED
+    after the reassignment-drop fix."""
+
+    def setup_method(self):
+        from diplomat_agent.scanner.interprocedural import PackageIndex
+
+        self.results: dict[str, str] = {}
+        for fname in ("etage2_self_method.py", "etage2_local_binding.py"):
+            fixture = MCP_FIXTURES_GATE2 / fname
+            pkg = PackageIndex(fixture.parent)
+            tools = scan_file(fixture, package_index=pkg)
+            apply_verdicts(tools)
+            for t in tools:
+                self.results[f"{fname}::{t.name}"] = t.verdict
+
+    def test_etage2_self_method_still_unguarded(self):
+        key = "etage2_self_method.py::run"
+        assert key in self.results, f"{key} not found; got {list(self.results)}"
+        assert self.results[key] == "UNGUARDED", (
+            f"étage2_self_method.run must be UNGUARDED; got {self.results[key]!r}"
+        )
+
+    def test_etage2_local_binding_still_unguarded(self):
+        key = "etage2_local_binding.py::handler"
+        assert key in self.results, f"{key} not found; got {list(self.results)}"
+        assert self.results[key] == "UNGUARDED", (
+            f"étage2_local_binding.handler must be UNGUARDED; got {self.results[key]!r}"
+        )
