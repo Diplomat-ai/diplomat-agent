@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from diplomat_agent.scanner.ast_scanner import scan_file
+from diplomat_agent.scanner.interprocedural import PackageIndex
 from diplomat_agent.analyzer.guards import apply_verdicts
 
 MCP_FIXTURES = Path(__file__).parent / "fixtures" / "mcp"
@@ -203,6 +204,76 @@ class TestReadonlyLoggingToolNotOpaque:
 # ---------------------------------------------------------------------------
 # 7. GATE 4 — dynamic registration mcp.tool(name=...)(fn)
 # ---------------------------------------------------------------------------
+
+
+class TestEtage2SelfMethod:
+    """GATE 5: self.method() inside a class must resolve to the enclosing
+    class method via lookup_class_method, surfacing the real side effect."""
+
+    def setup_method(self):
+        fixture = MCP_FIXTURES / "etage2_self_method.py"
+        pkg = PackageIndex(fixture.parent)
+        tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_run_detected(self):
+        assert "run" in self.tools
+
+    def test_run_exposure_is_mcp_tool(self):
+        assert self.tools["run"].exposure == "mcp_tool"
+
+    def test_run_verdict_is_unguarded(self):
+        """Étage 2 resolution must surface os.remove → UNGUARDED, not OPAQUE."""
+        assert self.tools["run"].verdict == "UNGUARDED"
+
+    def test_run_side_effects_mention_remove(self):
+        evidence = " ".join(se.evidence for se in self.tools["run"].side_effects)
+        assert "remove" in evidence
+
+
+class TestEtage2ClassMethod:
+    """GATE 5: PascalCase receiver Writer.method() resolves to enclosing
+    class method via the type heuristic."""
+
+    def setup_method(self):
+        fixture = MCP_FIXTURES / "etage2_class_method.py"
+        pkg = PackageIndex(fixture.parent)
+        tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_run_detected(self):
+        assert "run" in self.tools
+
+    def test_run_verdict_is_unguarded(self):
+        assert self.tools["run"].verdict == "UNGUARDED"
+
+    def test_run_side_effects_mention_remove(self):
+        evidence = " ".join(se.evidence for se in self.tools["run"].side_effects)
+        assert "remove" in evidence
+
+
+class TestEtage2LocalBinding:
+    """GATE 5: `w = Writer()` plain assign in the function body binds w to
+    Writer, letting étage 2 resolve w.run(path) → Writer.run."""
+
+    def setup_method(self):
+        fixture = MCP_FIXTURES / "etage2_local_binding.py"
+        pkg = PackageIndex(fixture.parent)
+        tools = scan_file(fixture, package_index=pkg)
+        apply_verdicts(tools)
+        self.tools = {t.name: t for t in tools}
+
+    def test_handler_detected(self):
+        assert "handler" in self.tools
+
+    def test_handler_verdict_is_unguarded(self):
+        assert self.tools["handler"].verdict == "UNGUARDED"
+
+    def test_handler_side_effects_mention_remove(self):
+        evidence = " ".join(se.evidence for se in self.tools["handler"].side_effects)
+        assert "remove" in evidence
 
 
 class TestDynamicRegistration:
