@@ -137,6 +137,16 @@ BENIGN_BUILTIN_NAMES: frozenset[str] = frozenset({
 
 # Pure attribute methods on stdlib types (str / list / dict / set / tuple).
 # An attribute call whose method name is in this set is treated as benign.
+# Also used when the receiver type is not bound (e.g. literals). Only names
+# that are NEVER an external side effect. Do NOT add: send, write, execute*,
+# run, post — those remain carriers.
+
+# Known builtin types whose method calls are never external side effects.
+BUILTIN_TYPES: frozenset[str] = frozenset({
+    "str", "bytes", "int", "float", "bool", "complex",
+    "list", "dict", "set", "frozenset", "tuple", "bytearray",
+})
+
 BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     # str methods (all pure)
     "upper", "lower", "title", "strip", "lstrip", "rstrip",
@@ -149,7 +159,12 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     "isspace", "istitle", "isupper", "islower", "isprintable",
     "isidentifier", "isascii",
     # dict / list / set read methods
-    "keys", "values", "items", "copy",
+    "get", "keys", "values", "items", "copy",
+    # list / set in-memory mutation (no external side effect)
+    "append", "extend", "pop", "add", "update",
+    "insert", "remove", "clear", "discard",
+    # tuple / sequence
+    "index",
     # json / serialization (no I/O)
     "dumps", "loads",
     # pathlib / Path joinpath (pure path math)

@@ -1099,3 +1099,61 @@ class TestSetTransactionNotDbWrite:
             "run_query has no writes — scan_file must return no Tool for it; "
             f"got side_effects={[se.evidence for se in self.tools.get('run_query', type('T',[],{'side_effects':[]})()).side_effects]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# GATE 1 — benign stdlib method calls must NOT be OPAQUE
+# ---------------------------------------------------------------------------
+
+
+class TestBenignStdlibNotOpaque:
+    """GATE 1: @mcp.tool that only calls stdlib methods on typed params (str,
+    dict, list) must NOT be classified as OPAQUE."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "benign_typed_call.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_benign_stdlib_not_opaque(self):
+        """fmt() with only s.upper(), d.get(), items[:2] must not be OPAQUE."""
+        if "fmt" in self.tools:
+            assert self.tools["fmt"].verdict != "OPAQUE", (
+                f"fmt() was incorrectly classified as OPAQUE; "
+                f"opaque_reason={self.tools['fmt'].opaque_reason!r}"
+            )
+
+    def test_wrapped_db_still_opaque(self):
+        """Regression: wrapped_db_tool.run_query must still be OPAQUE."""
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "wrapped_db_tool.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        tools_by_name = {t.name: t for t in tools}
+        assert "run_query" in tools_by_name
+        assert tools_by_name["run_query"].verdict == "OPAQUE", (
+            f"wrapped_db_tool.run_query must still be OPAQUE after the fix; "
+            f"got {tools_by_name['run_query'].verdict!r}"
+        )
+
+    def test_wrapped_socket_still_opaque(self):
+        """Regression: wrapped_socket_tool.do_thing must still be OPAQUE."""
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "wrapped_socket_tool.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        tools_by_name = {t.name: t for t in tools}
+        assert "do_thing" in tools_by_name
+        assert tools_by_name["do_thing"].verdict == "OPAQUE", (
+            f"wrapped_socket_tool.do_thing must still be OPAQUE after the fix; "
+            f"got {tools_by_name['do_thing'].verdict!r}"
+        )
