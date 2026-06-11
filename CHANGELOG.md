@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.5.2] — 2026-06-11
+
+### Added — Wrapped side-effects (étage 1 + étage 2)
+
+- **GATE 1 — étage 1 OPAQUE honesty floor**: tools whose @mcp.tool body
+  contains an unresolved effect-carrier (attribute call or unknown bare Name
+  whose name does not match SIDE_EFFECT_PATTERN and is not in the benign
+  allow-lists) are surfaced as `verdict="OPAQUE"` with a populated
+  `opaque_reason`. Tools that previously vanished now stay visible. Benign
+  filters: `BENIGN_BUILTIN_NAMES`, `BENIGN_ATTR_METHODS`, `BENIGN_RECEIVERS`.
+- **GATE 2 — Dispatcher zero-branch fallback**: `@server.call_tool()`
+  dispatchers with zero resolvable branches now emit one OPAQUE `Tool`
+  (`exposure="mcp_internal"`, `opaque_reason` set) instead of disappearing
+  after a stderr warning.
+- **GATE 3 — `mcp_client` default `opaque_reason`** + JSON serialization:
+  every `mcp_client` tool now carries a default `opaque_reason` if none was
+  set by an earlier path; `opaque_reason` is now serialised in JSON when
+  non-empty (omitted when empty for compact output).
+- **GATE 4 — Curried dynamic registration**: `mcp.tool(name=...)(fn)` is
+  detected as programmatic registration and `fn` is promoted to
+  `exposure="mcp_tool"`. Evidence string mentions "programmatic".
+- **GATE 5 — Étage 2 attribute-call interproc**: `obj.method(...)` calls
+  inside @mcp.tool bodies are resolved when the receiver type is statically
+  certain (`self.method` with known enclosing class, `Class.method` with
+  PascalCase receiver, `var: SomeClass` annotation, or `var = SomeClass(...)`
+  plain Assign in the same function). Reassigned bindings are dropped.
+  Resolution uses `PackageIndex.lookup_class_method` and the refactored
+  `_collect_callee_effects` back-end. Strictly additive: unresolved attribute
+  calls still hit the GATE 1 OPAQUE floor.
+- **GATE 6 — Narrow SDK verb breadth**: five high-signal verbs added to
+  `SIDE_EFFECT_PATTERNS` via `attr_exact` only:
+  `execute_query`, `execute_param_query` → `database_write`;
+  `sendall`, `send_command` → `destructive`;
+  `start_execution` → `destructive`.
+
+### JSON schema additions (v0.5.2, all additive)
+`opaque_reason` (str, omitted when empty). No removals or renames.
+
+### Acceptance scans
+- pg-mcp-server: 20 → 31 visible tools, 4 → 18 UNGUARDED (14 previously
+  unresolved findings now correctly classified by GATE 6).
+- docker-mcp: 4 → 18 visible tools (14 surfaced by GATE 1 + GATE 5).
+- k8s-mcp-server: 2 → 14 visible tools (12 surfaced by GATE 1 floor).
+No `uncertain → UNGUARDED` escalations observed: guardrail held across all
+three corpora.
+
+### Tests
+434 passed, 1 skipped (+15 new MCP scan tests across GATEs 1, 4, 5, 6).
+
+---
+
 ## [0.5.1] — 2026-06-10
 
 ### Added (Gates 1-4, merged earlier as fix/mcp-fidelity-0.5.1)
