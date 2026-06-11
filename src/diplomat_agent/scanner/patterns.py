@@ -163,8 +163,6 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     # list / set in-memory mutation (no external side effect)
     "append", "extend", "pop", "add", "update",
     "insert", "remove", "clear", "discard",
-    # tuple / sequence
-    "index",
     # json / serialization (no I/O)
     "dumps", "loads",
     # pathlib / Path joinpath (pure path math)

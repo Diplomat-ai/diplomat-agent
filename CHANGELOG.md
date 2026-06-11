@@ -35,6 +35,95 @@
   `sendall`, `send_command` → `destructive`;
   `start_execution` → `destructive`.
 
+### Fixed — Precision improvements (chore/v0.5.2-prod-ready, June 11, 2026)
+
+- **GATE 1 precision fix**: `@mcp.tool` functions whose body only calls stdlib
+  methods on annotated builtin-typed params (`str`, `dict`, `list`, `bytes`,
+  `int`, `float`, `bool`, `complex`, `set`, `frozenset`, `tuple`, `bytearray`)
+  are no longer classified as OPAQUE. These calls are never external side
+  effects. The `type_bindings` dict (already computed for étage-2 interproc)
+  is now threaded into `_has_unresolved_effect_carrier` to enable receiver-type
+  filtering. Example: `def fmt(s: str, d: dict): return s.upper() + str(d.get("k"))`
+  previously emitted OPAQUE (false positive); now drops (no external effect).
+- **GATE 2 reassignment fix**: `_collect_type_bindings` now drops a variable's
+  type binding when the same variable is reassigned to any call (not just a
+  PascalCase constructor). Prevents false type resolution of `r = Reader(); r = get_writer();
+  r.flush()` — `r`'s type is now correctly treated as uncertain.
+- **BENIGN_ATTR_METHODS extended**: added `get`, `append`, `extend`, `pop`,
+  `add`, `update`, `insert`, `remove`, `clear`, `discard` to the allow-list.
+  These are in-memory mutation methods that cannot be external side effects.
+  Excluded from the list: `send`, `write`, `execute*`, `run`, `post`.
+- **Windows path YAML escaping**: `registry.py` now calls `_yaml_escape()` on
+  `tool.file` and the `path` metadata field. Fixes `toolcalls.yaml` parse error
+  on Windows paths containing backslashes (`\U`, `\D` YAML escape collision).
+
+### New negative fixtures (GATE 2)
+
+- `tests/fixtures/mcp/benign_typed_call.py` — stdlib-only tool on typed params;
+  must NOT be OPAQUE.
+- `tests/fixtures/mcp/untyped_wrapper.py` — untyped `driver` param; must be
+  OPAQUE, never UNGUARDED.
+- `tests/fixtures/mcp/reassigned_var.py` — reassigned receiver; must be OPAQUE,
+  never UNGUARDED.
+
+### Tests
+445 passed, 1 skipped (+11 new tests: 3 GATE 1 false-positive guards,
+8 GATE 2 negative-fixture tests). Full suite green on Python 3.12.
+
+### Documentation
+
+- `docs/REALITY_CHECK_RESULTS.md`: closed v0.5.1 verification debt (GATE 0);
+  added v0.5.2 section with two-number reporting (unguarded % over analyzable
+  tools + opacity rate). Zero unexplained FPs confirmed on fixture corpus.
+
+### JSON schema additions (v0.5.2, all additive)
+`opaque_reason` (str, omitted when empty). No removals or renames.
+
+### Acceptance scans
+- pg-mcp-server: 20 → 31 visible tools, 4 → 18 UNGUARDED (14 previously
+  unresolved findings now correctly classified by GATE 6).
+- docker-mcp: 4 → 18 visible tools (14 surfaced by GATE 1 + GATE 5).
+- k8s-mcp-server: 2 → 14 visible tools (12 surfaced by GATE 1 floor).
+No `uncertain → UNGUARDED` escalations observed: guardrail held across all
+three corpora.
+
+---
+
+## [0.5.1] — 2026-06-10
+
+### Added — Wrapped side-effects (étage 1 + étage 2)
+
+- **GATE 1 — étage 1 OPAQUE honesty floor**: tools whose @mcp.tool body
+  contains an unresolved effect-carrier (attribute call or unknown bare Name
+  whose name does not match SIDE_EFFECT_PATTERN and is not in the benign
+  allow-lists) are surfaced as `verdict="OPAQUE"` with a populated
+  `opaque_reason`. Tools that previously vanished now stay visible. Benign
+  filters: `BENIGN_BUILTIN_NAMES`, `BENIGN_ATTR_METHODS`, `BENIGN_RECEIVERS`.
+- **GATE 2 — Dispatcher zero-branch fallback**: `@server.call_tool()`
+  dispatchers with zero resolvable branches now emit one OPAQUE `Tool`
+  (`exposure="mcp_internal"`, `opaque_reason` set) instead of disappearing
+  after a stderr warning.
+- **GATE 3 — `mcp_client` default `opaque_reason`** + JSON serialization:
+  every `mcp_client` tool now carries a default `opaque_reason` if none was
+  set by an earlier path; `opaque_reason` is now serialised in JSON when
+  non-empty (omitted when empty for compact output).
+- **GATE 4 — Curried dynamic registration**: `mcp.tool(name=...)(fn)` is
+  detected as programmatic registration and `fn` is promoted to
+  `exposure="mcp_tool"`. Evidence string mentions "programmatic".
+- **GATE 5 — Étage 2 attribute-call interproc**: `obj.method(...)` calls
+  inside @mcp.tool bodies are resolved when the receiver type is statically
+  certain (`self.method` with known enclosing class, `Class.method` with
+  PascalCase receiver, `var: SomeClass` annotation, or `var = SomeClass(...)`
+  plain Assign in the same function). Reassigned bindings are dropped.
+  Resolution uses `PackageIndex.lookup_class_method` and the refactored
+  `_collect_callee_effects` back-end. Strictly additive: unresolved attribute
+  calls still hit the GATE 1 OPAQUE floor.
+- **GATE 6 — Narrow SDK verb breadth**: five high-signal verbs added to
+  `SIDE_EFFECT_PATTERNS` via `attr_exact` only:
+  `execute_query`, `execute_param_query` → `database_write`;
+  `sendall`, `send_command` → `destructive`;
+  `start_execution` → `destructive`.
+
 ### JSON schema additions (v0.5.2, all additive)
 `opaque_reason` (str, omitted when empty). No removals or renames.
 

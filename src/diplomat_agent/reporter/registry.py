@@ -12,7 +12,6 @@ from pathlib import Path
 from diplomat_agent import __version__
 from diplomat_agent.models import ScanResult, Tool
 
-
 # Effect-type priority groups for NO CHECKS ordering
 _EFFECT_PRIORITY: list[tuple[int, frozenset[str]]] = [
     (0, frozenset({"payment", "database_delete", "dynamic_code"})),

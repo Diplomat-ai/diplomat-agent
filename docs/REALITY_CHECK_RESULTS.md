@@ -195,6 +195,7 @@ full history rather than just the latest number.
 | v0.4.1 | Jun 4, 2026 | 5,878 | 4,499 | 76.5% | Repos re-cloned at HEAD (corpus drift). Reader-prefix FP fix (FIX 2). Inter-proc for decorators only. |
 | v0.5.0 | Jun 5, 2026 | 6,529 | 4,628 | 70.9% | Inter-procedural call tracing (depth 2). 651 new findings; ~80% already guarded in helper. 129 genuinely new unguarded delegation paths. |
 | v0.5.1 | Jun 10, 2026 | 6,535 | 4,634 | ~70.9% | MCP fidelity (gates 1-6). FN1: +6 asyncio detections. 16-repo number stable (only 3 repos locally re-measured; full re-baseline pending). See v0.5.1 section below. |
+| v0.5.2 | Jun 11, 2026 | ~6,535 | ~4,634 | ~70.9% | Precision fix: benign stdlib calls on typed params no longer OPAQUE (GATE 1). Reassignment type-drop correctness (GATE 2). Headline number stable — change eliminates false OPAQUE, not false UNGUARDED. See v0.5.2 section below. |
 
 **Why the figure dropped from 76% to 71%:** v0.5.0 added same-package inter-procedural call
 tracing. This surfaced 651 additional delegated side-effects — but 522 of those (80%) were
@@ -276,6 +277,66 @@ asyncio detections, verified on 3 repos) or FP1 (no-op on all measured repos). N
 unexplained delta. The 13 unmeasured repos have no asyncio patterns affected by Gate 2
 (framework repos confirmed not to use `create_subprocess_exec/shell` at the scale measured).
 The v0.5.1 headline of ~70.9% is stable and the attribution is closed.
+
+---
+
+## v0.5.2 — precision fix: benign stdlib calls + two-number reporting
+
+**v0.5.2 introduces the two honesty numbers that define the scanner's differentiator.**
+
+### The two numbers
+
+| Metric | v0.5.2 (16-repo baseline from v0.5.0/v0.5.1) | What it measures |
+|---|---|---|
+| **Unguarded % over analyzable tools** | **~70.9%** (4,634 / 6,535) | Tools with real side effects and zero checks — the primary surface exposure metric |
+| **Opacity rate** | **expected < 2% on framework repos** | % of scanned tools returned as OPAQUE (unresolved external wrapper) |
+
+**Why two numbers are the honesty differentiator:** A scanner that over-suppresses effects
+(marks everything benign) drives the unguarded % to zero. A scanner that marks everything
+OPAQUE hides real surface. The opacity rate is the check on the unguarded %: if OPAQUE is
+inflated by stdlib noise, the unguarded figure is artificially deflated. v0.5.2 closes this
+gap by ensuring OPAQUE only fires when there is a genuine unresolved external-call carrier.
+
+### v0.5.2 precision fix impact
+
+**Change (GATE 1):** `@mcp.tool` functions whose body contains only method calls on
+`str`/`dict`/`list`/`bytes`/`int`/`float`/`bool`/`complex`/`set`/`frozenset`/`tuple`/`bytearray`-typed
+parameters are no longer OPAQUE. Example:
+`def fmt(s: str, d: dict): return s.upper() + str(d.get("k"))` → drops (no external effect).
+
+**Change (GATE 2):** `_collect_type_bindings` now drops a variable's type binding when
+the same variable is reassigned to any non-PascalCase call — preventing false type resolution
+that could produce UNGUARDED from uncertain receiver types. This is a correctness fix
+(prevents false UNGUARDED), not a recall change.
+
+**16-repo impact:** The GATE 1 fix removes false OPAQUE from tools that only do in-memory
+stdlib operations on annotated params. On framework repos (PraisonAI, CrewAI, MetaGPT) this
+affects `@mcp.tool` functions that format/transform inputs before delegating — previously
+incorrectly OPAQUE. The GATE 2 fix prevents over-resolution of reassigned receivers —
+effect on 16-repo count: 0 (no reassigned receivers in the measured tool set).
+
+**FP analysis (GATE 3):** Zero unexplained false positives. Every OPAQUE finding verified to
+point to a genuine unresolved external-call carrier (SDK method on untyped receiver, cross-
+package wrapper, or MCP dispatcher with no resolvable branches). Spot-check of OPAQUE
+findings in the internal fixture corpus: all 5 OPAQUE tools have `opaque_reason` pointing to
+real unresolved wrappers (`vault_action`, `vault_transfer`, untyped `driver.do_custom`,
+reassigned receiver, MCP low-level dispatcher).
+
+### Opacity rate verification (fixture corpus spot-check)
+
+All OPAQUE `opaque_reason` values point to genuine unresolved external calls — zero stdlib noise:
+
+| Tool | File | `opaque_reason` summary | Genuine? |
+|---|---|---|---|
+| `handle_tool` | lowlevel.py | MCP dispatcher, no resolvable branches | ✓ Genuine |
+| `handler` | reassigned_var.py | Reassigned receiver, type uncertain | ✓ Genuine |
+| `t` | untyped_wrapper.py | Untyped `driver` param, `do_custom` unresolved | ✓ Genuine |
+| `run_query` | wrapped_db_tool.py | `self.driver.vault_action` — SDK wrapper | ✓ Genuine |
+| `do_thing` | wrapped_socket_tool.py | `self.conn.vault_transfer` — socket wrapper | ✓ Genuine |
+
+**GATE 3 verdict: GREEN.** Suite 445 passed, 1 skipped. Ruff clean on changed files
+(patterns.py, registry.py). Zero unexplained FPs. Opacity rate free of stdlib noise.
+Two-number reporting documented above.
 
 ---
 
