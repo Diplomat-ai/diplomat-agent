@@ -158,11 +158,13 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     "isalpha", "isalnum", "isdigit", "isdecimal", "isnumeric",
     "isspace", "istitle", "isupper", "islower", "isprintable",
     "isidentifier", "isascii",
-    # dict / list / set read methods
+    # dict / list / set read methods — these are always safe reads regardless
+    # of receiver type. Mutators (append, add, update, insert, remove, pop,
+    # extend, clear, discard) are intentionally EXCLUDED here: they must only
+    # be skipped when the receiver type is a known builtin (handled by the
+    # type_bindings check in _has_unresolved_effect_carrier). On an untyped
+    # custom receiver they must remain carriers so OPAQUE fires correctly.
     "get", "keys", "values", "items", "copy",
-    # list / set in-memory mutation (no external side effect)
-    "append", "extend", "pop", "add", "update",
-    "insert", "remove", "clear", "discard",
     # json / serialization (no I/O)
     "dumps", "loads",
     # pathlib / Path joinpath (pure path math)

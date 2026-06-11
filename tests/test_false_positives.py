@@ -1157,3 +1157,39 @@ class TestBenignStdlibNotOpaque:
             f"wrapped_socket_tool.do_thing must still be OPAQUE after the fix; "
             f"got {tools_by_name['do_thing'].verdict!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 1 — Ambiguous mutator names: untyped receiver must be OPAQUE
+# ---------------------------------------------------------------------------
+
+
+class TestUntypedMutatorIsOpaque:
+    """Phase 1 locking test: ambiguous mutator method on untyped receiver must
+    trigger OPAQUE, not be silently dropped. Builtin-typed receiver must be clean."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "untyped_mutator.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_write_cache_is_opaque(self):
+        """cache.add(k, v) with untyped cache must be OPAQUE — unknown effect surface."""
+        assert "write_cache" in self.tools, (
+            f"write_cache not found; got {list(self.tools)}"
+        )
+        assert self.tools["write_cache"].verdict == "OPAQUE", (
+            f"write_cache must be OPAQUE (cache is untyped, .add is ambiguous); "
+            f"got verdict={self.tools['write_cache'].verdict!r}, "
+            f"opaque_reason={self.tools['write_cache'].opaque_reason!r}"
+        )
+
+    def test_append_list_is_clean(self):
+        """items.append(x) with items:list (builtin typed) must NOT be OPAQUE."""
+        if "append_list" in self.tools:
+            assert self.tools["append_list"].verdict != "OPAQUE", (
+                f"append_list must not be OPAQUE (items is typed list, append is in-memory); "
+                f"got {self.tools['append_list'].verdict!r}"
+            )
