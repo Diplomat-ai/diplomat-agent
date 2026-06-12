@@ -173,6 +173,9 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     "unparse", "parse",
     # find / index — string lookups (pure read)
     "find", "rfind", "index", "rindex",
+    # Wait primitives — asyncio.sleep / time.sleep / trio.sleep / anyio.sleep.
+    # On any receiver, `.sleep(...)` is a wait, never an external effect.
+    "sleep",
 })
 
 # Benign receiver/object names — attribute calls on these receivers are

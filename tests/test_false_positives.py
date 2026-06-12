@@ -1193,3 +1193,31 @@ class TestUntypedMutatorIsOpaque:
                 f"append_list must not be OPAQUE (items is typed list, append is in-memory); "
                 f"got {self.tools['append_list'].verdict!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 4 — sleep is never an external side effect
+# ---------------------------------------------------------------------------
+
+
+class TestSleepNotOpaque:
+    """asyncio.sleep / time.sleep / trio.sleep are wait primitives, never
+    external side effects. They must not push a tool to OPAQUE."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "benign_sleep.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_sleep_not_opaque(self):
+        """waits() uses only asyncio.sleep + time.sleep — must NOT be OPAQUE,
+        and ideally must produce no Tool entry at all (no findings)."""
+        if "waits" in self.tools:
+            verdict = self.tools["waits"].verdict
+            reason = self.tools["waits"].opaque_reason
+            assert verdict != "OPAQUE", (
+                f"waits() must not be OPAQUE — only sleep calls, no external effect; "
+                f"got verdict={verdict!r}, opaque_reason={reason!r}"
+            )
