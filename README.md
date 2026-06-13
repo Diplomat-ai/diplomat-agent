@@ -63,7 +63,7 @@ arguments, or get prompt-injected.
 **Without guards in the code, there's nothing between the LLM's decision
 and the real-world consequence.**
 
-We scanned 16 open-source agent repos. [~71% of tool calls have no guard — measured with inter-procedural tracing across 6,529 tool calls.](docs/REALITY_CHECK_RESULTS.md)
+We scanned 16 open-source agent repos. [70.9% of analyzable tool calls have no guard, with a 1.7% opacity rate — measured with inter-procedural tracing across 7,552 tool calls.](docs/REALITY_CHECK_RESULTS.md)
 
 ---
 
@@ -114,7 +114,7 @@ Works in your IDE with zero extension to install:
 ```yaml
 repos:
   - repo: https://github.com/Diplomat-ai/diplomat-agent
-    rev: v0.5.0
+    rev: v0.5.2
     hooks:
       - id: diplomat-agent
 ```

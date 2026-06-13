@@ -146,6 +146,18 @@ def _write_output(content: str, output_path: Path | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Main entry point. Returns exit code."""
+    # Windows consoles default to cp1252; our terminal reporter emits non-ASCII glyphs (⚠, etc.).
+    # Reconfigure stdout/stderr to UTF-8 with replacement so a narrow console degrades gracefully
+    # instead of raising UnicodeEncodeError. No-op on already-UTF-8 streams and on non-reconfigurable
+    # streams (e.g. captured pipes), guarded so it never itself raises.
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfig = getattr(_stream, "reconfigure", None)
+        if callable(_reconfig):
+            try:
+                _reconfig(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
     # Support 'scan' subcommand: strip it so both syntaxes are identical.
     # diplomat-agent scan <path> → diplomat-agent <path>
     if argv is not None:
@@ -400,10 +412,8 @@ def main(argv: list[str] | None = None) -> int:
                      and t.verdict != "LOW_RISK"]
 
         if baseline_entries is not None:
-            baseline_keys = {(tc.get("function", ""), tc.get("file", ""))
-                             for tc in baseline_entries}
-            new_unchecked = [t for t in unchecked
-                             if (t.name, t.file) not in baseline_keys]
+            from diplomat_agent.reporter.registry import diff_against_baseline
+            new_unchecked = diff_against_baseline(unchecked, baseline_entries)
 
             if new_unchecked:
                 print(

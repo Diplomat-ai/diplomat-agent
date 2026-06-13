@@ -281,3 +281,29 @@ class TestScanSubcommand:
         names1 = {f["function"] for f in d1["findings"]}
         names2 = {f["function"] for f in d2["findings"]}
         assert names1 == names2
+
+
+# ---------------------------------------------------------------------------
+# Windows cp1252 stdout — terminal reporter must not crash on non-UTF-8 console
+# ---------------------------------------------------------------------------
+
+
+class TestTerminalEncodingResilience:
+    def test_terminal_output_survives_non_utf8_stdout(self, tmp_path, monkeypatch):
+        """Default terminal format must not crash when stdout cannot encode non-ASCII (cp1252)."""
+        import io
+
+        f = tmp_path / "s.py"
+        f.write_text(
+            "import requests\n\ndef tool():\n    requests.post('http://x', json={})\n"
+        )
+
+        buf = io.BytesIO()
+        cp1252_stdout = io.TextIOWrapper(
+            buf, encoding="cp1252", errors="strict", newline=""
+        )
+        monkeypatch.setattr(sys, "stdout", cp1252_stdout)
+
+        rc = main([str(tmp_path)])
+        cp1252_stdout.flush()
+        assert rc == 0

@@ -153,6 +153,45 @@ class TestRegistryConfirmed:
 
 
 class TestFailOnUnchecked:
+    def test_registry_roundtrip_windows_paths_no_false_new(self, tmp_path):
+        """A baseline written with backslash paths must match itself on reload (no false NEW).
+
+        Cross-platform reproduction of the Windows --fail-on-unchecked break:
+        even on Linux, feeding a Windows-style file path through
+        write → load_baseline → diff_against_baseline must yield zero NEW findings.
+        """
+        from diplomat_agent.models import ScanResult, Tool, SideEffect
+        from diplomat_agent.reporter.registry import (
+            generate,
+            load_baseline,
+            diff_against_baseline,
+        )
+
+        win_path = r"C:\Users\dev\project\tools.py"
+        tool = Tool(
+            name="delete_customer",
+            file=win_path,
+            line=10,
+            params=[],
+            side_effects=[
+                SideEffect(
+                    category="database_delete",
+                    evidence="session.delete(c)",
+                    line=10,
+                    file=win_path,
+                )
+            ],
+            verdict="UNGUARDED",
+        )
+        result = ScanResult(tools=[tool], scenarios=[], summary={})
+
+        baseline_path = tmp_path / "toolcalls.yaml"
+        generate(result, output_path=str(baseline_path), scanned_path=r"C:\Users\dev\project")
+        loaded = load_baseline(baseline_path)
+
+        new = diff_against_baseline([tool], loaded)
+        assert new == [], f"path round-trip produced false NEW findings: {new}"
+
     def test_fail_on_unchecked_baseline(self, tmp_path):
         """CI blocks only NEW findings absent from baseline."""
         from diplomat_agent.cli import main
