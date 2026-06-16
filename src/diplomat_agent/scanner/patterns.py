@@ -814,6 +814,22 @@ READ_ONLY_PATTERNS: list[dict] = [
 # receiver object name. This overrides the http_write obj_contains heuristic
 # so that `client.get_post()` is not flagged as a side effect.
 # Do NOT add: update_, create_, delete_, post_, send_ — those are writes.
+# v0.5.3 GATE 2 — executor dispatch functions that pass a callable by reference.
+# asyncio.to_thread(fn, *args)     → callable at positional index 0
+# loop.run_in_executor(exec, fn)   → callable at positional index 1
+# pool.submit(fn, *args)           → callable at positional index 0
+# Matched by attribute name only; receiver varies (asyncio / loop / pool / ...).
+EXECUTOR_CALLABLE_ATTRS: frozenset[str] = frozenset({
+    "to_thread",        # asyncio.to_thread(fn, *args)
+    "run_in_executor",  # loop.run_in_executor(executor, fn, *args)
+    "submit",           # pool.submit(fn, *args) / executor.submit(fn, *args)
+})
+EXECUTOR_CALLABLE_ARG_INDEX: dict[str, int] = {
+    "to_thread": 0,
+    "run_in_executor": 1,
+    "submit": 0,
+}
+
 READER_METHOD_PREFIXES: tuple[str, ...] = (
     "get_", "list_", "read_", "fetch_",
     "search_", "query_", "find_", "describe_", "show_",

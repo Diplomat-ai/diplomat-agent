@@ -19,6 +19,8 @@ from diplomat_agent.scanner.patterns import (
     BENIGN_RECEIVERS,
     BUILTIN_TYPES,
     EXCLUDED_DIRS,
+    EXECUTOR_CALLABLE_ARG_INDEX,
+    EXECUTOR_CALLABLE_ATTRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
     HELPER_CALL_EXCLUDE_PATTERNS,
@@ -1165,6 +1167,7 @@ def _resolve_dispatcher(
             module_is_mcp_client=False,
             programmatic_mcp_tools=None,
             interproc_source_cache=interproc_source_cache,
+            treat_as_mcp_tool=True,  # v0.5.3 GATE 1: apply OPAQUE floor to dispatcher handlers
         )
 
         if tool is None:
@@ -1262,6 +1265,37 @@ def _has_unresolved_effect_carrier(
 
         # Attribute call (obj.method(), self.method(), a.b.c())
         if isinstance(node.func, ast.Attribute):
+            # v0.5.3 GATE 2 — executor callable detection.
+            # asyncio.to_thread(fn, *args), loop.run_in_executor(exec, fn),
+            # pool.submit(fn, *args): the real effect-carrier is the callable
+            # argument passed by reference (an ast.Attribute/ast.Name, not a
+            # Call). Inspect it; return evidence when non-benign, skip when
+            # benign. This fires before the generic attribute-call check so that
+            # a benign callable (e.g. json.dumps) silences the executor call too.
+            if attr in EXECUTOR_CALLABLE_ATTRS:
+                callable_idx = EXECUTOR_CALLABLE_ARG_INDEX.get(attr, 0)
+                if len(node.args) > callable_idx:
+                    callable_arg = node.args[callable_idx]
+                    if isinstance(callable_arg, ast.Attribute):
+                        c_attr = callable_arg.attr.lower() if callable_arg.attr else ""
+                        if (
+                            c_attr not in BENIGN_ATTR_METHODS
+                            and not any(c_attr.startswith(p) for p in READER_METHOD_PREFIXES)
+                            and not _is_excluded_helper_name(c_attr)
+                        ):
+                            return _src(callable_arg, source_lines) or _src(node, source_lines)
+                        continue  # benign callable attribute → executor call is clean
+                    elif isinstance(callable_arg, ast.Name):
+                        cname = callable_arg.id
+                        clow = cname.lower()
+                        if (
+                            clow not in BENIGN_BUILTIN_NAMES
+                            and not _is_excluded_helper_name(clow)
+                            and not (cname and cname[0].isupper())
+                        ):
+                            return _src(callable_arg, source_lines) or _src(node, source_lines)
+                        continue  # benign callable name → executor call is clean
+                # No recognisable callable arg → fall through to generic attribute check.
             if attr in BENIGN_ATTR_METHODS:
                 continue
             if attr and any(attr.startswith(p) for p in READER_METHOD_PREFIXES):
@@ -1318,8 +1352,15 @@ def _analyze_function(
     programmatic_mcp_tools: "set[str] | None" = None,
     interproc_source_cache: "dict[str, list[str]] | None" = None,
     enclosing_class: str | None = None,
+    treat_as_mcp_tool: bool = False,
 ) -> Tool | None:
-    """Analyze a single function/method and return a Tool if it has side effects."""
+    """Analyze a single function/method and return a Tool if it has side effects.
+
+    ``treat_as_mcp_tool`` (v0.5.3 GATE 1): when True, apply the OPAQUE honesty
+    floor even though ``module_is_mcp`` is False.  Used for dispatcher-resolved
+    handlers so that an unresolved effect-carrier surfaces as OPAQUE rather than
+    being dropped as None → LOW_RISK by the caller.
+    """
     # --- Collect intra-procedural side effects (body only, skip decorators) ---
     se_visitor = _SideEffectVisitor(source_lines, file_path)
     for stmt in func_node.body:
@@ -1413,7 +1454,9 @@ def _analyze_function(
         # v0.5.2 GATE 1 — étage 1 honesty floor: an MCP-exposed function whose
         # effect surface we cannot resolve becomes OPAQUE, never None. A non-MCP
         # internal helper with no detected effects still drops (no noise).
-        if module_is_mcp:
+        # v0.5.3 GATE 1 — treat_as_mcp_tool extends the same floor to
+        # dispatcher-resolved handlers (module_is_mcp=False in that path).
+        if module_is_mcp or treat_as_mcp_tool:
             carrier_src = _has_unresolved_effect_carrier(
                 func_node, recognized_call_ids, source_lines, type_bindings
             )
@@ -1433,6 +1476,11 @@ def _analyze_function(
                     if func_node.name in programmatic_mcp_tools:
                         op_exposure = "mcp_tool"
                         op_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
+                # v0.5.3 GATE 1 — dispatcher handler: no decorator, so always
+                # promote to mcp_tool with the routing key as evidence.
+                if op_exposure == "mcp_internal" and treat_as_mcp_tool:
+                    op_exposure = "mcp_tool"
+                    op_evidence = f"@*.call_tool dispatcher [{func_node.name}]"
                 return Tool(
                     name=func_node.name,
                     file=file_path,
