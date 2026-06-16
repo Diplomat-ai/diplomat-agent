@@ -1099,3 +1099,125 @@ class TestSetTransactionNotDbWrite:
             "run_query has no writes — scan_file must return no Tool for it; "
             f"got side_effects={[se.evidence for se in self.tools.get('run_query', type('T',[],{'side_effects':[]})()).side_effects]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# GATE 1 — benign stdlib method calls must NOT be OPAQUE
+# ---------------------------------------------------------------------------
+
+
+class TestBenignStdlibNotOpaque:
+    """GATE 1: @mcp.tool that only calls stdlib methods on typed params (str,
+    dict, list) must NOT be classified as OPAQUE."""
+
+    @classmethod
+    def setup_class(cls):
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "benign_typed_call.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_benign_stdlib_not_opaque(self):
+        """fmt() with only s.upper(), d.get(), items[:2] must not be OPAQUE."""
+        if "fmt" in self.tools:
+            assert self.tools["fmt"].verdict != "OPAQUE", (
+                f"fmt() was incorrectly classified as OPAQUE; "
+                f"opaque_reason={self.tools['fmt'].opaque_reason!r}"
+            )
+
+    def test_wrapped_db_still_opaque(self):
+        """Regression: wrapped_db_tool.run_query must still be OPAQUE."""
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "wrapped_db_tool.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        tools_by_name = {t.name: t for t in tools}
+        assert "run_query" in tools_by_name
+        assert tools_by_name["run_query"].verdict == "OPAQUE", (
+            f"wrapped_db_tool.run_query must still be OPAQUE after the fix; "
+            f"got {tools_by_name['run_query'].verdict!r}"
+        )
+
+    def test_wrapped_socket_still_opaque(self):
+        """Regression: wrapped_socket_tool.do_thing must still be OPAQUE."""
+        from pathlib import Path
+        from diplomat_agent.scanner.ast_scanner import scan_file
+        from diplomat_agent.analyzer.guards import apply_verdicts
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "wrapped_socket_tool.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        tools_by_name = {t.name: t for t in tools}
+        assert "do_thing" in tools_by_name
+        assert tools_by_name["do_thing"].verdict == "OPAQUE", (
+            f"wrapped_socket_tool.do_thing must still be OPAQUE after the fix; "
+            f"got {tools_by_name['do_thing'].verdict!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 1 — Ambiguous mutator names: untyped receiver must be OPAQUE
+# ---------------------------------------------------------------------------
+
+
+class TestUntypedMutatorIsOpaque:
+    """Phase 1 locking test: ambiguous mutator method on untyped receiver must
+    trigger OPAQUE, not be silently dropped. Builtin-typed receiver must be clean."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "untyped_mutator.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_write_cache_is_opaque(self):
+        """cache.add(k, v) with untyped cache must be OPAQUE — unknown effect surface."""
+        assert "write_cache" in self.tools, (
+            f"write_cache not found; got {list(self.tools)}"
+        )
+        assert self.tools["write_cache"].verdict == "OPAQUE", (
+            f"write_cache must be OPAQUE (cache is untyped, .add is ambiguous); "
+            f"got verdict={self.tools['write_cache'].verdict!r}, "
+            f"opaque_reason={self.tools['write_cache'].opaque_reason!r}"
+        )
+
+    def test_append_list_is_clean(self):
+        """items.append(x) with items:list (builtin typed) must NOT be OPAQUE."""
+        if "append_list" in self.tools:
+            assert self.tools["append_list"].verdict != "OPAQUE", (
+                f"append_list must not be OPAQUE (items is typed list, append is in-memory); "
+                f"got {self.tools['append_list'].verdict!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 4 — sleep is never an external side effect
+# ---------------------------------------------------------------------------
+
+
+class TestSleepNotOpaque:
+    """asyncio.sleep / time.sleep / trio.sleep are wait primitives, never
+    external side effects. They must not push a tool to OPAQUE."""
+
+    @classmethod
+    def setup_class(cls):
+        fixture = Path(__file__).parent / "fixtures" / "mcp" / "benign_sleep.py"
+        tools = scan_file(fixture)
+        apply_verdicts(tools)
+        cls.tools = {t.name: t for t in tools}
+
+    def test_sleep_not_opaque(self):
+        """waits() uses only asyncio.sleep + time.sleep — must NOT be OPAQUE,
+        and ideally must produce no Tool entry at all (no findings)."""
+        if "waits" in self.tools:
+            verdict = self.tools["waits"].verdict
+            reason = self.tools["waits"].opaque_reason
+            assert verdict != "OPAQUE", (
+                f"waits() must not be OPAQUE — only sleep calls, no external effect; "
+                f"got verdict={verdict!r}, opaque_reason={reason!r}"
+            )

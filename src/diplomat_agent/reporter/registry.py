@@ -12,7 +12,6 @@ from pathlib import Path
 from diplomat_agent import __version__
 from diplomat_agent.models import ScanResult, Tool
 
-
 # Effect-type priority groups for NO CHECKS ordering
 _EFFECT_PRIORITY: list[tuple[int, frozenset[str]]] = [
     (0, frozenset({"payment", "database_delete", "dynamic_code"})),
@@ -71,7 +70,7 @@ def _indent(level: int) -> str:
 def _render_tool_entry(tool: Tool, buf: StringIO, include_confirmed: bool = False) -> None:
     """Render a single tool entry as YAML."""
     buf.write(f"  - function: {tool.name}\n")
-    buf.write(f"    file: {tool.file}\n")
+    buf.write(f"    file: {_yaml_escape(str(tool.file))}\n")
     buf.write(f"    line: {tool.line}\n")
     if tool.exposure == "mcp_tool":
         buf.write("    exposure: mcp_tool\n")
@@ -138,7 +137,7 @@ def generate(result: ScanResult, output_path: str | Path, scanned_path: str = ".
     buf.write(f"generated: \"{now}\"\n")
     buf.write(f"version: \"{__version__}\"\n")
     buf.write("spec_version: \"1.0\"\n")
-    buf.write(f"path: \"{scanned_path}\"\n")
+    buf.write(f"path: {_yaml_escape(scanned_path)}\n")
     buf.write("\n")
 
     # Classify tools
@@ -233,8 +232,55 @@ def load_baseline(path: Path) -> list[dict]:
     return [tc for tc in data.get("tool_calls", []) if isinstance(tc, dict)]
 
 
+def _canonical_path_key(file_str: str) -> str:
+    """Canonical form of a file path for baseline comparison.
+
+    The YAML representation of a path participates in equality unless we
+    normalize it identically on both sides. We use a POSIX-style separator
+    plus case-normalize so Windows-written baselines round-trip correctly
+    (single vs double backslash from YAML escaping, mixed case drive letters).
+    """
+    if not file_str:
+        return ""
+    return file_str.replace("\\", "/").casefold()
+
+
+def diff_against_baseline(tool_calls, baseline_entries) -> list:
+    """Return the subset of tool_calls whose (function, file) key is absent
+    from baseline_entries. Used by --fail-on-unchecked CI gate.
+
+    The file path is normalized identically on both sides via
+    `_canonical_path_key`, so YAML-escape artifacts (Windows backslashes
+    doubled by the writer) never cause false NEW findings.
+    """
+    baseline_keys = {
+        (tc.get("function", ""), _canonical_path_key(tc.get("file", "")))
+        for tc in baseline_entries
+    }
+    return [
+        t for t in tool_calls
+        if (t.name, _canonical_path_key(t.file)) not in baseline_keys
+    ]
+
+
+def _yaml_unescape_scalar(raw: str) -> str:
+    """Reverse `_yaml_escape` for the no-PyYAML fallback loader.
+
+    Strip surrounding double-quotes and undo the backslash/quote escapes the
+    writer applied (\\\\ -> \\, \\" -> "). Unquoted values pass through.
+    """
+    if len(raw) >= 2 and raw.startswith('"') and raw.endswith('"'):
+        inner = raw[1:-1]
+        return inner.replace('\\"', '"').replace("\\\\", "\\")
+    return raw
+
+
 def _load_baseline_simple(path: Path) -> list[dict]:
-    """Fallback baseline loader without PyYAML — extracts function/file pairs."""
+    """Fallback baseline loader without PyYAML — extracts function/file pairs.
+
+    Reverses the writer's YAML escaping so Windows paths round-trip
+    symmetrically (matches what yaml.safe_load would return).
+    """
     entries: list[dict] = []
     current: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -242,9 +288,9 @@ def _load_baseline_simple(path: Path) -> list[dict]:
         if stripped.startswith("- function:"):
             if current:
                 entries.append(current)
-            current = {"function": stripped.split(":", 1)[1].strip()}
+            current = {"function": _yaml_unescape_scalar(stripped.split(":", 1)[1].strip())}
         elif stripped.startswith("file:") and current:
-            current["file"] = stripped.split(":", 1)[1].strip()
+            current["file"] = _yaml_unescape_scalar(stripped.split(":", 1)[1].strip())
     if current:
         entries.append(current)
     return entries

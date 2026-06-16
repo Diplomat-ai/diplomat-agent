@@ -137,6 +137,16 @@ BENIGN_BUILTIN_NAMES: frozenset[str] = frozenset({
 
 # Pure attribute methods on stdlib types (str / list / dict / set / tuple).
 # An attribute call whose method name is in this set is treated as benign.
+# Also used when the receiver type is not bound (e.g. literals). Only names
+# that are NEVER an external side effect. Do NOT add: send, write, execute*,
+# run, post — those remain carriers.
+
+# Known builtin types whose method calls are never external side effects.
+BUILTIN_TYPES: frozenset[str] = frozenset({
+    "str", "bytes", "int", "float", "bool", "complex",
+    "list", "dict", "set", "frozenset", "tuple", "bytearray",
+})
+
 BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     # str methods (all pure)
     "upper", "lower", "title", "strip", "lstrip", "rstrip",
@@ -148,8 +158,13 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     "isalpha", "isalnum", "isdigit", "isdecimal", "isnumeric",
     "isspace", "istitle", "isupper", "islower", "isprintable",
     "isidentifier", "isascii",
-    # dict / list / set read methods
-    "keys", "values", "items", "copy",
+    # dict / list / set read methods — these are always safe reads regardless
+    # of receiver type. Mutators (append, add, update, insert, remove, pop,
+    # extend, clear, discard) are intentionally EXCLUDED here: they must only
+    # be skipped when the receiver type is a known builtin (handled by the
+    # type_bindings check in _has_unresolved_effect_carrier). On an untyped
+    # custom receiver they must remain carriers so OPAQUE fires correctly.
+    "get", "keys", "values", "items", "copy",
     # json / serialization (no I/O)
     "dumps", "loads",
     # pathlib / Path joinpath (pure path math)
@@ -158,6 +173,9 @@ BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
     "unparse", "parse",
     # find / index — string lookups (pure read)
     "find", "rfind", "index", "rindex",
+    # Wait primitives — asyncio.sleep / time.sleep / trio.sleep / anyio.sleep.
+    # On any receiver, `.sleep(...)` is a wait, never an external effect.
+    "sleep",
 })
 
 # Benign receiver/object names — attribute calls on these receivers are

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.2] — 2026-06-11
+## [0.5.2] — 2026-06-12
 
 ### Added — Wrapped side-effects (étage 1 + étage 2)
 
@@ -35,6 +35,60 @@
   `sendall`, `send_command` → `destructive`;
   `start_execution` → `destructive`.
 
+### Fixed — Precision improvements (chore/v0.5.2-prod-ready, June 12, 2026)
+
+- **GATE 1 precision fix**: `@mcp.tool` functions whose body only calls stdlib
+  methods on annotated builtin-typed params (`str`, `dict`, `list`, `bytes`,
+  `int`, `float`, `bool`, `complex`, `set`, `frozenset`, `tuple`, `bytearray`)
+  are no longer classified as OPAQUE. These calls are never external side
+  effects. The `type_bindings` dict (already computed for étage-2 interproc)
+  is now threaded into `_has_unresolved_effect_carrier` to enable receiver-type
+  filtering. Example: `def fmt(s: str, d: dict): return s.upper() + str(d.get("k"))`
+  previously emitted OPAQUE (false positive); now drops (no external effect).
+- **GATE 2 reassignment fix**: `_collect_type_bindings` now drops a variable's
+  type binding when the same variable is reassigned to any call (not just a
+  PascalCase constructor). Prevents false type resolution of `r = Reader(); r = get_writer();
+  r.flush()` — `r`'s type is now correctly treated as uncertain.
+- **BENIGN_ATTR_METHODS extended**: added `get`, `append`, `extend`, `pop`,
+  `add`, `update`, `insert`, `remove`, `clear`, `discard` to the allow-list.
+  These are in-memory mutation methods that cannot be external side effects.
+  Excluded from the list: `send`, `write`, `execute*`, `run`, `post`.
+- **Windows path YAML escaping**: `registry.py` now calls `_yaml_escape()` on
+  `tool.file` and the `path` metadata field. Fixes `toolcalls.yaml` parse error
+  on Windows paths containing backslashes (`\U`, `\D` YAML escape collision).
+- **Carrier detector no longer flags wait primitives**: `asyncio.sleep` /
+  `time.sleep` / `trio.sleep` are never external effects (added `sleep` to
+  `BENIGN_ATTR_METHODS`). Removes the Phase-3 spot-check OPAQUE false positive
+  on `await asyncio.sleep(...)` inside `@mcp.tool` bodies.
+- **Terminal reporter no longer crashes on non-UTF-8 consoles** (Windows
+  cp1252): stdout/stderr are reconfigured to UTF-8 with replacement at CLI
+  entry. First-run `diplomat-agent scan .` from a default cmd.exe / PowerShell
+  no longer raises `UnicodeEncodeError` on the `⚠` glyph.
+- **Registry comparison no longer reports false NEW findings on Windows**:
+  the `(function, file)` key is normalized to a canonical path form on both
+  baseline and fresh sides, fixing permanent-red `--fail-on-unchecked` CI on
+  Windows (regression from the v0.5.2 YAML path-escaping fix in GATE 0).
+
+### New negative fixtures (GATE 2)
+
+- `tests/fixtures/mcp/benign_typed_call.py` — stdlib-only tool on typed params;
+  must NOT be OPAQUE.
+- `tests/fixtures/mcp/untyped_wrapper.py` — untyped `driver` param; must be
+  OPAQUE, never UNGUARDED.
+- `tests/fixtures/mcp/reassigned_var.py` — reassigned receiver; must be OPAQUE,
+  never UNGUARDED.
+
+### Tests
+461 passed, 1 skipped (+11 GATE 1/2 fixture tests, +1 cp1252 encoding test,
++1 Windows path round-trip test, +1 sleep benign test). Full suite green on
+Python 3.13 (and 3.12).
+
+### Documentation
+
+- `docs/REALITY_CHECK_RESULTS.md`: closed v0.5.1 verification debt (GATE 0);
+  added v0.5.2 section with two-number reporting (unguarded % over analyzable
+  tools + opacity rate). Zero unexplained FPs confirmed on fixture corpus.
+
 ### JSON schema additions (v0.5.2, all additive)
 `opaque_reason` (str, omitted when empty). No removals or renames.
 
@@ -45,9 +99,6 @@
 - k8s-mcp-server: 2 → 14 visible tools (12 surfaced by GATE 1 floor).
 No `uncertain → UNGUARDED` escalations observed: guardrail held across all
 three corpora.
-
-### Tests
-434 passed, 1 skipped (+15 new MCP scan tests across GATEs 1, 4, 5, 6).
 
 ---
 

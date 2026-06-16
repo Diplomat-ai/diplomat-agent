@@ -17,6 +17,7 @@ from diplomat_agent.scanner.patterns import (
     BENIGN_ATTR_METHODS,
     BENIGN_BUILTIN_NAMES,
     BENIGN_RECEIVERS,
+    BUILTIN_TYPES,
     EXCLUDED_DIRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
@@ -813,12 +814,16 @@ def _collect_type_bindings(
             if not isinstance(stmt.value, ast.Call):
                 continue
             ctor = stmt.value.func
+            name = stmt.targets[0].id
             if isinstance(ctor, ast.Name) and ctor.id and ctor.id[0].isupper():
-                name = stmt.targets[0].id
                 if name in bindings and bindings[name] != ctor.id:
                     reassigned.add(name)
                 else:
                     bindings[name] = ctor.id
+            elif name in bindings:
+                # Non-PascalCase call assigned to an already-bound name —
+                # type becomes uncertain; drop the binding.
+                reassigned.add(name)
 
     for name in reassigned:
         bindings.pop(name, None)
@@ -1240,6 +1245,7 @@ def _has_unresolved_effect_carrier(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     recognized_call_ids: set[int],
     source_lines: list[str],
+    type_bindings: "dict[str, str] | None" = None,
 ) -> str | None:
     """Return source-evidence of the first unresolved effect-carrier Call, or None."""
     # Walk only the function body, not the decorator list — decorators like
@@ -1269,6 +1275,17 @@ def _has_unresolved_effect_carrier(
                 if obj_first in BENIGN_RECEIVERS or obj_last in BENIGN_RECEIVERS:
                     continue
                 if obj in BENIGN_RECEIVERS:
+                    continue
+            # type_bindings check: if the direct receiver is a single Name
+            # whose type is a known builtin, the method is never an external
+            # side effect (diplomat ignores in-memory mutation).
+            if (
+                type_bindings is not None
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+            ):
+                recv_name = node.func.value.id
+                if type_bindings.get(recv_name) in BUILTIN_TYPES:
                     continue
             # Unresolved attribute call → effect-carrier candidate.
             return _src(node, source_lines)
@@ -1398,7 +1415,7 @@ def _analyze_function(
         # internal helper with no detected effects still drops (no noise).
         if module_is_mcp:
             carrier_src = _has_unresolved_effect_carrier(
-                func_node, recognized_call_ids, source_lines
+                func_node, recognized_call_ids, source_lines, type_bindings
             )
             if carrier_src is not None:
                 # Pre-compute exposure (mcp_tool via decorator/programmatic,
