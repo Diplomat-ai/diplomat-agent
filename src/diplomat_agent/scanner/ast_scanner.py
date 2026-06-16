@@ -773,6 +773,23 @@ def _resolve_call_effects(
 # the calling tool. Anything uncertain → no resolution → OPAQUE floor applies.
 
 
+def _body_stmts(stmts: list[ast.stmt]) -> list[ast.stmt]:
+    """Flatten always-executed statement paths for type-binding collection.
+
+    Descends into try-body and with-body (both always executed before any
+    exception).  Skips except-handlers and else/finally branches (conditional).
+    Only one level of flattening is needed in practice; recursive for safety.
+    """
+    result: list[ast.stmt] = []
+    for s in stmts:
+        result.append(s)
+        if isinstance(s, ast.Try):
+            result.extend(_body_stmts(s.body))
+        elif isinstance(s, (ast.With, ast.AsyncWith)):
+            result.extend(_body_stmts(s.body))
+    return result
+
+
 def _collect_type_bindings(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> dict[str, str]:
@@ -781,12 +798,18 @@ def _collect_type_bindings(
     Sources (all conservative, only Name-typed):
       1. param annotations  def f(x: Foo)              → {"x": "Foo"}
       2. AnnAssign           x: Foo = ...               → {"x": "Foo"}
-      3. plain Assign        x = Foo(...)               → {"x": "Foo"}
-         (only if Foo is a Name with a leading uppercase letter — heuristic for
-         class constructor; rejects foo(), self.foo(), Foo.bar())
+      3a. plain Assign        x = []  / x = {}  / x = "" / x = 0 / x = b""
+          literal nodes      → {"x": "list"} / {"x": "dict"} / … (BUILTIN_TYPES)
+      3b. plain Assign        x = Foo(...)               → {"x": "Foo"}
+          (PascalCase ctor; rejects foo(), self.foo(), Foo.bar())
+      3c. plain Assign        x = list() / x = dict() / …
+          builtin ctors      → {"x": "list"} / … (BUILTIN_TYPES)
 
-    Reassignment policy: if the same name appears twice with different RHS
-    classes, drop the binding entirely (uncertain).
+    The walk descends into try/with always-executed bodies so that assignments
+    like  port_mappings = []  inside a try-block are captured.
+
+    Reassignment policy: if the same name appears twice with different types,
+    drop the binding entirely (uncertain).
     """
     bindings: dict[str, str] = {}
     reassigned: set[str] = set()
@@ -798,8 +821,8 @@ def _collect_type_bindings(
         if arg.annotation is not None and isinstance(arg.annotation, ast.Name):
             bindings[arg.arg] = arg.annotation.id
 
-    # 2 + 3. body assignments (top-level statements only — bias to certainty)
-    for stmt in func_node.body:
+    # 2 + 3. body assignments — walk always-executed paths (try/with bodies included)
+    for stmt in _body_stmts(func_node.body):
         if isinstance(stmt, ast.AnnAssign):
             if (
                 isinstance(stmt.target, ast.Name)
@@ -813,19 +836,42 @@ def _collect_type_bindings(
         elif isinstance(stmt, ast.Assign):
             if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
                 continue
-            if not isinstance(stmt.value, ast.Call):
-                continue
-            ctor = stmt.value.func
             name = stmt.targets[0].id
-            if isinstance(ctor, ast.Name) and ctor.id and ctor.id[0].isupper():
-                if name in bindings and bindings[name] != ctor.id:
+            val = stmt.value
+            # 3a. Literal nodes (x = [], x = {}, x = "", x = 0, x = b"", …)
+            inferred: str | None = None
+            if isinstance(val, ast.List):
+                inferred = "list"
+            elif isinstance(val, ast.Dict):
+                inferred = "dict"
+            elif isinstance(val, ast.Set):
+                inferred = "set"
+            elif isinstance(val, ast.Tuple):
+                inferred = "tuple"
+            elif isinstance(val, ast.Constant):
+                if isinstance(val.value, bytes):
+                    inferred = "bytes"
+                elif isinstance(val.value, str):
+                    inferred = "str"
+                elif isinstance(val.value, (int, float)):
+                    inferred = "int"
+            elif isinstance(val, ast.Call):
+                ctor = val.func
+                # 3b. PascalCase constructors (e.g. MyClass())
+                # 3c. builtin lowercase constructors — reuse BUILTIN_TYPES
+                if isinstance(ctor, ast.Name) and ctor.id:
+                    if ctor.id[0].isupper():
+                        inferred = ctor.id
+                    elif ctor.id in BUILTIN_TYPES:
+                        inferred = ctor.id
+                    elif name in bindings:
+                        # Unknown call reassigns a bound name — type becomes uncertain
+                        reassigned.add(name)
+            if inferred is not None:
+                if name in bindings and bindings[name] != inferred:
                     reassigned.add(name)
                 else:
-                    bindings[name] = ctor.id
-            elif name in bindings:
-                # Non-PascalCase call assigned to an already-bound name —
-                # type becomes uncertain; drop the binding.
-                reassigned.add(name)
+                    bindings[name] = inferred
 
     for name in reassigned:
         bindings.pop(name, None)

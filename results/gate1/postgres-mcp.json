@@ -1,0 +1,183 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp",
+  "summary": {
+    "total": 14,
+    "unguarded": 1,
+    "partially_guarded": 1,
+    "guarded": 0,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "format_text_response",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 74,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "format_error_response",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 79,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "list_schemas",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 91,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "list_objects",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 123,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get_object_details",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 197,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "explain_query",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 336,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "execute_sql",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 415,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "analyze_workload_indexes",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 438,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "analyze_query_indexes",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 465,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "analyze_db_health",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 506,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get_top_queries",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 531,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "main",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 557,
+      "actions": [
+        "loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(s)))"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "shutdown",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/server.py",
+      "line": 672,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_generate_recommendations",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/postgres-mcp/src/postgres_mcp/index/llm_opt.py",
+      "line": 74,
+      "actions": [
+        "response = client.chat.completions.create("
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if no_progress_count > 0:"
+        },
+        {
+          "type": "input_validation",
+          "detail": "if self.max_no_progress_attempts - no_progress_count < self.max_no_progress_attempts / 2:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 126
+}

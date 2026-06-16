@@ -1,0 +1,140 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp",
+  "summary": {
+    "total": 9,
+    "unguarded": 6,
+    "partially_guarded": 0,
+    "guarded": 0,
+    "low_risk": 3
+  },
+  "findings": [
+    {
+      "function": "create-container",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 32,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "deploy-compose",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 69,
+      "actions": [
+        "compose_path = DockerHandlers._save_compose_file(",
+        "result = await DockerHandlers._deploy_stack(compose_path, project_name, debug_info)"
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get-logs",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 166,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "list-containers",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 183,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "execute",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/docker_executor.py",
+      "line": 15,
+      "actions": [
+        "process = await asyncio.create_subprocess_shell("
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "execute",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/docker_executor.py",
+      "line": 27,
+      "actions": [
+        "process = await asyncio.create_subprocess_exec("
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "run_command",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/docker_executor.py",
+      "line": 69,
+      "actions": [
+        "return await self.executor.execute(cmd)"
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "handle_deploy_compose",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 69,
+      "actions": [
+        "compose_path = DockerHandlers._save_compose_file(",
+        "result = await DockerHandlers._deploy_stack(compose_path, project_name, debug_info)"
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_cleanup_files",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 155,
+      "actions": [
+        "os.remove(compose_path)",
+        "os.rmdir(compose_dir)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 21
+}

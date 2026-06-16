@@ -1,0 +1,253 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server",
+  "summary": {
+    "total": 19,
+    "unguarded": 5,
+    "partially_guarded": 0,
+    "guarded": 0,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "handle_call_tool",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 631,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "create_healthlake_server",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 267,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "default",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 63,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "handle_tool",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 127,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_get_datastore",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 143,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_create",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 148,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_read",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 160,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_update",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 169,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_delete",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 182,
+      "actions": [
+        "return await self.client.delete_resource(",
+        "return await self.client.delete_resource("
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_search",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 194,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_patient_everything",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 212,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_import_job",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 228,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_export_job",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 242,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_handle_list_jobs",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 255,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "handle_list_resources",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/server.py",
+      "line": 600,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "search_resources",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/fhir_operations.py",
+      "line": 658,
+      "actions": [
+        "response = await client.post(url, data=form_data, headers=headers, auth=auth)"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on count",
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "create_resource",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/fhir_operations.py",
+      "line": 781,
+      "actions": [
+        "response = await client.post(url, json=resource_data, auth=auth)"
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "update_resource",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/fhir_operations.py",
+      "line": 805,
+      "actions": [
+        "response = await client.put(url, json=resource_data, auth=auth)"
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "delete_resource",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/healthlake-mcp-server/awslabs/healthlake_mcp_server/fhir_operations.py",
+      "line": 835,
+      "actions": [
+        "response = await client.delete(url, auth=auth)",
+        "response = await client.delete(url, auth=auth)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 50
+}

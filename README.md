@@ -171,6 +171,20 @@ inter-procedural tracing (e.g. CrewAI ~38s).
 
 ---
 
+## Verdicts
+
+| Verdict | Meaning | Posture |
+|---|---|---|
+| ❌ UNGUARDED | Side effects detected, no checks found | Fix before deploy |
+| ⚡ PARTIALLY GUARDED | Some checks present, others missing | Review + add missing guards |
+| ✅ GUARDED | All expected checks are present | OK |
+| ✅ LOW RISK | Read-only operations — no state mutation | OK |
+| ◐ OPAQUE | Effect surface could not be statically resolved | **Not a risk rating** — review manually |
+
+OPAQUE is honest, not alarming. It means the scanner reached the boundary of what static analysis can see (callable passed to an executor, remote MCP call, unresolvable dispatcher branch). Use `# checked:ok — [reason]` once reviewed.
+
+---
+
 ## Output formats
 
 | Format | Flag | Use case |

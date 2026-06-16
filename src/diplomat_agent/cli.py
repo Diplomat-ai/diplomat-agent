@@ -285,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
             "unguarded": sum(1 for t in _mcp_tools if t.verdict == "UNGUARDED"),
             "partially_guarded": sum(1 for t in _mcp_tools if t.verdict == "PARTIALLY_GUARDED"),
             "guarded": sum(1 for t in _mcp_tools if t.verdict in ("GUARDED", "LOW_RISK")),
+            "opaque": sum(1 for t in _mcp_tools if t.verdict == "OPAQUE"),
         }
     else:
         mcp_summary = None

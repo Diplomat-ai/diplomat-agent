@@ -27,6 +27,7 @@ _VERDICT_ICONS = {
     "PARTIALLY_GUARDED": "⚠",
     "GUARDED": "✓",
     "LOW_RISK": "✓",
+    "OPAQUE": "◐",
 }
 
 _VERDICT_LABELS = {
@@ -34,6 +35,7 @@ _VERDICT_LABELS = {
     "PARTIALLY_GUARDED": "⚡ PARTIALLY GUARDED",
     "GUARDED": "✅ GUARDED",
     "LOW_RISK": "✅ LOW RISK",
+    "OPAQUE": "◐ OPAQUE",
 }
 
 
@@ -54,6 +56,11 @@ def _plain_tool_block(tool: Tool) -> str:
     if tool.verdict == "LOW_RISK":
         ro_label = "Read-only:"
         lines.append(f"  {ro_label:<24}YES")
+    elif tool.verdict == "OPAQUE":
+        lines.append("  not a risk rating — effect surface could not be statically resolved")
+        lines.append("  (review manually)")
+        if tool.opaque_reason:
+            lines.append(f"  unresolved at: {tool.opaque_reason}")
     else:
         # Show expected guard check lines per category
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
@@ -207,10 +214,11 @@ def render_plain(
         ug = mcp_summary["unguarded"]
         pg = mcp_summary["partially_guarded"]
         gd = mcp_summary["guarded"]
-        w(
-            f"EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}  "
-            f"{ug} UNGUARDED · {pg} PARTIAL · {gd} GUARDED"
-        )
+        opaque = mcp_summary.get("opaque", 0)
+        summary_parts = f"{ug} unguarded (action) · {pg} partial · {gd} guarded"
+        if opaque:
+            summary_parts += f" · {opaque} opaque (review)"
+        w(f"EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}  {summary_parts}")
         w()
 
     if not result.tools:
@@ -303,9 +311,12 @@ def _render_rich(
         ug = mcp_summary["unguarded"]
         pg = mcp_summary["partially_guarded"]
         gd = mcp_summary["guarded"]
+        opaque = mcp_summary.get("opaque", 0)
+        opaque_part = f" · [blue]{opaque} opaque (review)[/blue]" if opaque else ""
         console.print(
             f"[bold cyan]EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}[/bold cyan]  "
-            f"[red]{ug} UNGUARDED[/red] · [yellow]{pg} PARTIAL[/yellow] · [green]{gd} GUARDED[/green]"
+            f"[red]{ug} unguarded (action)[/red] · [yellow]{pg} partial[/yellow] · [green]{gd} guarded[/green]"
+            + opaque_part
         )
         console.print()
 
@@ -373,6 +384,9 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
     elif tool.verdict == "PARTIALLY_GUARDED":
         icon_color = "yellow"
         icon = "⚠"
+    elif tool.verdict == "OPAQUE":
+        icon_color = "blue"
+        icon = "◐"
     else:
         icon_color = "green"
         icon = "✓"
@@ -383,6 +397,11 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
     if tool.verdict == "LOW_RISK":
         ro_label = "Read-only:"
         console.print(f"  {ro_label:<24}[green]YES[/green]")
+    elif tool.verdict == "OPAQUE":
+        console.print("  [dim]not a risk rating — effect surface could not be statically resolved[/dim]")
+        console.print("  [dim](review manually)[/dim]")
+        if tool.opaque_reason:
+            console.print(f"  [dim]unresolved at: {tool.opaque_reason}[/dim]")
     else:
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
         guard_types_present = {g.type: g for g in tool.guards}
@@ -417,6 +436,8 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
         console.print(f"  Governance: [bold red]{verdict_label}[/bold red]")
     elif tool.verdict == "PARTIALLY_GUARDED":
         console.print(f"  Governance: [bold yellow]{verdict_label}[/bold yellow]")
+    elif tool.verdict == "OPAQUE":
+        console.print(f"  Governance: [bold blue]{verdict_label}[/bold blue]")
     else:
         console.print(f"  Governance: [bold green]{verdict_label}[/bold green]")
     # Contract violation badge

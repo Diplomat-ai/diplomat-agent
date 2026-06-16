@@ -1,0 +1,47 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/bench/langchain-mcp-adapters/langchain_mcp_adapters",
+  "summary": {
+    "total": 3,
+    "unguarded": 0,
+    "partially_guarded": 0,
+    "guarded": 0,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "convert_mcp_tool_to_langchain_tool",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/langchain-mcp-adapters/langchain_mcp_adapters/tools.py",
+      "line": 357,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "call_tool",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/langchain-mcp-adapters/langchain_mcp_adapters/tools.py",
+      "line": 399,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "execute_tool",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/langchain-mcp-adapters/langchain_mcp_adapters/tools.py",
+      "line": 423,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "OPAQUE",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 49
+}

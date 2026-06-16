@@ -129,6 +129,27 @@ GOLDEN_CASES = [
         "builtin-typed s.upper() / d.get() must remain clean (no OPAQUE on stdlib)",
         id="G3-builtin-typed",
     ),
+    # --- GATE 1 (Show HN): list literal + to_thread → OPAQUE (via executor, NOT via append) ---
+    pytest.param(
+        "literal_type_bindings.py", "list_with_executor",
+        "OPAQUE",
+        "list literal + to_thread must be OPAQUE; append on list must not be the carrier",
+        id="G4-literal-list-executor",
+    ),
+    # --- GATE 1 (Show HN): dict literal + .get() only → clean ---
+    pytest.param(
+        "literal_type_bindings.py", "dict_read_only",
+        "clean",
+        "dict literal with only .get() calls must stay clean (no external effects)",
+        id="G4-literal-dict-clean",
+    ),
+    # --- GATE 1 (Show HN): list literal + .append() only → clean ---
+    pytest.param(
+        "literal_type_bindings.py", "list_append_only",
+        "clean",
+        "list literal with only .append() calls must stay clean (no external effects)",
+        id="G4-literal-list-append-clean",
+    ),
 ]
 
 

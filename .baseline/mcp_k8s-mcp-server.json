@@ -1,0 +1,48 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/k8s-mcp-server",
+  "summary": {
+    "total": 2,
+    "unguarded": 0,
+    "partially_guarded": 2,
+    "guarded": 0,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "execute_command",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/k8s-mcp-server/src/k8s_mcp_server/cli_executor.py",
+      "line": 102,
+      "actions": [
+        "process.kill()"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if len(stdout_str) > MAX_OUTPUT_SIZE:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_command_help",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/k8s-mcp-server/src/k8s_mcp_server/cli_executor.py",
+      "line": 422,
+      "actions": [
+        "process.kill()  [via execute_command() @ src/k8s_mcp_server/cli_executor.py:102]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if len(stdout_str) > MAX_OUTPUT_SIZE:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    }
+  ],
+  "scan_time_ms": 36
+}

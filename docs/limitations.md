@@ -8,3 +8,15 @@
 - **`name_contains` patterns** (e.g. "refund", "charge") may match internal business methods that aren't actual payment operations (~22% FP rate on payment patterns)
 - **No import alias resolution** — `import requests as r` then `r.post()` is not detected
 - **Python only** — TypeScript on the roadmap
+
+## OPAQUE verdict — by design
+
+`OPAQUE` is not a risk rating. It means the effect surface could not be statically resolved and requires manual review.
+
+This verdict is intentional in three situations:
+
+- **External library callables** — when an MCP tool passes a callable into a third-party executor (e.g. `asyncio.to_thread(fn)`, `executor.submit(fn)`), the callable's body is outside the scan unit. diplomat-agent surfaces it as OPAQUE rather than silently under-reporting.
+- **Dispatcher indirection** — `@server.call_tool` handlers receive a tool name at runtime. The scanner resolves branches it can see; branches pointing outside the package produce OPAQUE.
+- **MCP client proxies** — `session.call_tool(...)` routes to a remote server. The real effect is server-side and invisible to static analysis.
+
+`readOnlyHint: true` in an MCP tool description is **not trusted** by diplomat-agent. A dispatcher handler that declares itself read-only but calls an external executable or passes a callable to an executor is still reported as OPAQUE until the implementation can be verified.

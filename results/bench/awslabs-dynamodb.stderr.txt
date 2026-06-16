@@ -1,0 +1,1 @@
+Report written to: results/bench/awslabs-dynamodb.json

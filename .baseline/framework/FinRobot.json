@@ -1,0 +1,1183 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/FinRobot",
+  "summary": {
+    "total": 81,
+    "unguarded": 63,
+    "partially_guarded": 17,
+    "guarded": 1,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "delete_user_session",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/auth.py",
+      "line": 77,
+      "actions": [
+        "return crud.delete_session(db, session_id)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "create_user",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 31,
+      "actions": [
+        "db.add(user)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on github_id"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "update_user_login",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 65,
+      "actions": [
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "update_user_password",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 78,
+      "actions": [
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "create_session",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 90,
+      "actions": [
+        "db.add(session)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on user_id"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_session",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 112,
+      "actions": [
+        "db.delete(session)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "delete_session",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 123,
+      "actions": [
+        "db.delete(session)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "delete_user_sessions",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 133,
+      "actions": [
+        "count = db.query(SessionModel).filter(SessionModel.user_id == user_id).delete()",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on user_id",
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "log_request",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 144,
+      "actions": [
+        "db.add(log)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on user_id"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "create_report_request",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 193,
+      "actions": [
+        "db.add(report)",
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on user_id"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "update_report_request",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/database/crud.py",
+      "line": 226,
+      "actions": [
+        "db.commit()"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "logout",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/main.py",
+      "line": 175,
+      "actions": [
+        "delete_user_session(session_id)",
+        "response.delete_cookie(\"session_id\")"
+      ],
+      "checks": [
+        {
+          "type": "auth_check",
+          "detail": "@app.post(\"/api/auth/logout\")"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "github_callback",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/main.py",
+      "line": 228,
+      "actions": [
+        "token_response = await client.post("
+      ],
+      "checks": [
+        {
+          "type": "auth_check",
+          "detail": "@app.get(\"/api/auth/github/callback\")"
+        },
+        {
+          "type": "idempotency_key",
+          "detail": "user = get_or_create_github_user("
+        }
+      ],
+      "missing": [],
+      "verdict": "GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "run_process",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/main.py",
+      "line": 361,
+      "actions": [
+        "process = subprocess.Popen("
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "execute_analysis_pipeline",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/web_app/main.py",
+      "line": 395,
+      "actions": [
+        "process = subprocess.Popen(  [via run_process() @ finrobot_equity/web_app/main.py:361]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_text_section",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/text_generator_agents.py",
+      "line": 77,
+      "actions": [
+        "response = client.chat.completions.create("
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_text_section",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/equity_agents/agent_manager.py",
+      "line": 65,
+      "actions": [
+        "result = await Runner.run(agent, financial_prompt, run_config=run_config)",
+        "result = await Runner.run(agent, financial_prompt)"
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "add_footer",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/pdf_generator.py",
+      "line": 824,
+      "actions": [
+        "canvas_obj.saveState()"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "_save_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 102,
+      "actions": [
+        "fig.savefig(filepath, format=fmt, bbox_inches='tight',"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_revenue_yoy_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 142,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_revenue_yoy')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_ebitda_margin_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 197,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_ebitda_margin')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_gross_margin_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 249,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_gross_margin')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_sga_ratio_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 288,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_sga_ratio')"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if income_df.empty or 'sellingGeneralAndAdministrativeExpenses' not in income_df.columns:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_ltm_ebitda_margin_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 327,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_ltm_ebitda_margin')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_relative_performance_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 364,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_relative_perf')"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if prices_df.empty or benchmark_df.empty:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_ev_ebitda_band_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 418,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_ev_ebitda_band')"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if key_metrics_df.empty or 'enterpriseValueOverEBITDA' not in key_metrics_df.columns:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_p_fcf_band_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 464,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_p_fcf_band')"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if key_metrics_df.empty or 'priceToFreeCashFlowsRatio' not in key_metrics_df.columns:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_peer_comparison_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 510,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_peer_comparison')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_football_field_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 579,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_football_field')"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if 'current_price' in valuation_data:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_eps_pe_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_chart_generator.py",
+      "line": 641,
+      "actions": [
+        "return self._save_chart(fig, output_dir, f'{ticker}_eps_pe')"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "add_page_header_footer",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/professional_pdf_report.py",
+      "line": 1459,
+      "actions": [
+        "canvas_obj.saveState()"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "_generate_with_llm",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/enhanced_text_generator.py",
+      "line": 79,
+      "actions": [
+        "response = self.client.chat.completions.create("
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "save_chart_to_base64",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 87,
+      "actions": [
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_revenue_ebitda_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 109,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_ev_ebitda_peer_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 201,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_eps_pe_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 277,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_margin_trend_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 364,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_revenue_breakdown_pie",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 447,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_stock_price_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 512,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if price_data.empty:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_financial_radar_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 597,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_time_series_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 674,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_sensitivity_heatmap",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 735,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_technical_indicators_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 812,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if price_data.empty or 'close' not in price_data.columns:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_valuation_waterfall_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 908,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_quarterly_comparison_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 986,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "generate_cash_flow_chart",
+      "file": "/Users/josselin/dev/FinRobot/finrobot_equity/core/src/modules/chart_generator.py",
+      "line": 1060,
+      "actions": [
+        "result = save_chart_to_base64(fig, output_path)",
+        "fig.savefig(buffer, format='png', bbox_inches='tight', dpi=150,  [via save_chart_to_base64() @ finrobot_equity/core/src/modules/chart_generator.py:87]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "process_single_pdf",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/marker_sec_src/pdf_to_md_parallel.py",
+      "line": 36,
+      "actions": [
+        "save_markdown(out_folder, fname, full_text, images, out_metadata)"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if min_length:"
+        },
+        {
+          "type": "input_validation",
+          "detail": "if length < min_length:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "run_marker",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/marker_sec_src/pdf_to_md.py",
+      "line": 11,
+      "actions": [
+        "subfolder_path = save_markdown("
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on batch_multiplier"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "ungz_file",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/filings_src/prepline_sec_filings/api/section.py",
+      "line": 286,
+      "actions": [
+        "return UploadFile("
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "pipeline_1",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/filings_src/prepline_sec_filings/api/section.py",
+      "line": 308,
+      "actions": [
+        "return UploadFile(  [via ungz_file() @ finrobot/data_source/filings_src/prepline_sec_filings/api/section.py:286]"
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_data",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finance_data.py",
+      "line": 10,
+      "actions": [
+        "html_urls, metadata_json, metadata_file_path,input_ticker_year_path = sec_save_pdfs("
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on batch_multiplier"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_company_news",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnhub_utils.py",
+      "line": 54,
+      "actions": [
+        "save_output(output, f\"company news of {symbol}\", save_path=save_path)"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if len(news) > max_news_num:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_basic_financials_history",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnhub_utils.py",
+      "line": 92,
+      "actions": [
+        "save_output(financials_output, \"basic financials\", save_path=save_path)"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if value[\"period\"] >= start_date and value[\"period\"] <= end_date:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "streaming_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 32,
+      "actions": [
+        "save_output(selected, tag, save_path)"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "date_range_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 46,
+      "actions": [
+        "save_output(selected_news, tag, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "cnbc_news_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 66,
+      "actions": [
+        "save_output(selected, tag, save_path)  [via streaming_download() @ finrobot/data_source/finnlp_utils.py:32]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "yicai_news_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 75,
+      "actions": [
+        "save_output(selected, tag, save_path)  [via streaming_download() @ finrobot/data_source/finnlp_utils.py:32]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "investor_place_news_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 84,
+      "actions": [
+        "save_output(selected, tag, save_path)  [via streaming_download() @ finrobot/data_source/finnlp_utils.py:32]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "sina_finance_news_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 107,
+      "actions": [
+        "save_output(selected_news, tag, save_path)  [via date_range_download() @ finrobot/data_source/finnlp_utils.py:46]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "finnhub_news_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 127,
+      "actions": [
+        "save_output(selected_news, tag, save_path)  [via date_range_download() @ finrobot/data_source/finnlp_utils.py:46]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "xueqiu_social_media_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 140,
+      "actions": [
+        "save_output(selected, tag, save_path)  [via streaming_download() @ finrobot/data_source/finnlp_utils.py:32]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "stocktwits_social_media_download",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/finnlp_utils.py",
+      "line": 162,
+      "actions": [
+        "save_output(selected, tag, save_path)  [via streaming_download() @ finrobot/data_source/finnlp_utils.py:32]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if hasattr(downloader, 'download_streaming_search'):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "elif hasattr(downloader, 'download_streaming_stock'):"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_stock_data",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/yfinance_utils.py",
+      "line": 23,
+      "actions": [
+        "save_output(stock_data, f\"Stock data for {ticker.ticker}\", save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_reddit_posts",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/data_source/reddit_utils.py",
+      "line": 34,
+      "actions": [
+        "save_output(output, f\"reddit posts related to {query}\", save_path=save_path)"
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "chat",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/agents/workflow.py",
+      "line": 152,
+      "actions": [
+        "self.user_proxy.initiate_chat("
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "chat",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/agents/workflow.py",
+      "line": 338,
+      "actions": [
+        "self.user_proxy.initiate_chat("
+      ],
+      "checks": [],
+      "missing": [
+        "no rate limit"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "rag_database_earnings_call",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/ragquery.py",
+      "line": 17,
+      "actions": [
+        "html_urls, metadata_json, metadata_file_path,input_ticker_year_path = sec_save_pdfs(  [via get_data() @ finrobot/data_source/finance_data.py:10]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "rag_database_sec",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/ragquery.py",
+      "line": 105,
+      "actions": [
+        "html_urls, metadata_json, metadata_file_path,input_ticker_year_path = sec_save_pdfs(  [via get_data() @ finrobot/data_source/finance_data.py:10]"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_income_stmt",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 24,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_balance_sheet",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 62,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_cash_flow",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 91,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_segment_stmt",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 120,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "income_summarization",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 152,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_risk_assessment",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 186,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_competitors_analysis",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 221,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_business_highlights",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 273,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "analyze_company_description",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/analyzer.py",
+      "line": 301,
+      "actions": [
+        "save_to_file(prompt, save_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "notify_order",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/quantitative.py",
+      "line": 18,
+      "actions": [
+        "self.deployed_capital.append(order.executed.price * order.executed.size)",
+        "self.deployed_capital.append(order.executed.price * order.executed.size)"
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "back_test",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/quantitative.py",
+      "line": 40,
+      "actions": [
+        "module = importlib.import_module(module_path)",
+        "module = importlib.import_module(module_path)",
+        "module = importlib.import_module(module_path)",
+        "plt.savefig(save_fig)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_share_performance",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/charting.py",
+      "line": 76,
+      "actions": [
+        "plt.savefig(plot_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    },
+    {
+      "function": "get_pe_eps_performance",
+      "file": "/Users/josselin/dev/FinRobot/finrobot/functional/charting.py",
+      "line": 152,
+      "actions": [
+        "plt.savefig(plot_path)"
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false
+    }
+  ],
+  "scan_time_ms": 504
+}

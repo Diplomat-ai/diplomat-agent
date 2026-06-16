@@ -1,0 +1,438 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server",
+  "summary": {
+    "total": 26,
+    "unguarded": 22,
+    "partially_guarded": 4,
+    "guarded": 0,
+    "low_risk": 0
+  },
+  "findings": [
+    {
+      "function": "dynamodb_data_model_schema_validator",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/server.py",
+      "line": 241,
+      "actions": [
+        "result = subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "result = subprocess.run(cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no s  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "subprocess.run(format_cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no she  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "generate_data_access_layer",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/server.py",
+      "line": 816,
+      "actions": [
+        "result = subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "result = subprocess.run(cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no s  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "subprocess.run(format_cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no she  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_run_cdk_init",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/cdk_generator/generator.py",
+      "line": 101,
+      "actions": [
+        "subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "parse_results_and_generate_analysis",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/db_analyzer/analyzer_utils.py",
+      "line": 258,
+      "actions": [
+        "saved_files, save_errors = save_analysis_files("
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on pattern_analysis_days"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "execute_managed_analysis",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/db_analyzer/analyzer_utils.py",
+      "line": 297,
+      "actions": [
+        "saved_files, save_errors = save_analysis_files("
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_validate_included_attributes_exist",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/core/gsi_validator.py",
+      "line": 1198,
+      "actions": [
+        "entity_fields.update("
+      ],
+      "checks": [],
+      "missing": [],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "delete",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/languages/python/base_repository.py",
+      "line": 212,
+      "actions": [
+        "response = self.table.delete_item(Key=key)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "delete_entity",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/languages/python/base_repository.py",
+      "line": 227,
+      "actions": [
+        "return self.delete(entity.pk(), entity.sk())"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "run_linter",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py",
+      "line": 224,
+      "actions": [
+        "result = subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout",
+        "result = subprocess.run(cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no s",
+        "subprocess.run(format_cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no she"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "generate",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py",
+      "line": 293,
+      "actions": [
+        "result = subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "result = subprocess.run(cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no s  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "subprocess.run(format_cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no she  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "main",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py",
+      "line": 465,
+      "actions": [
+        "result = subprocess.run(  # nosec B603, B607 - user local env, hardcoded cmd, no shell, timeout  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "result = subprocess.run(cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no s  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]",
+        "subprocess.run(format_cmd, timeout=LINTER_EXECUTION_TIMEOUT)  # nosec B603, B607 - user local env, hardcoded cmd, no she  [via run_linter() @ awslabs/dynamodb_mcp_server/repo_generation_tool/codegen.py:224]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_run_subprocess_safely",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 97,
+      "actions": [
+        "return subprocess.run("
+      ],
+      "checks": [],
+      "missing": [
+        "no bounds on timeout",
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_get_dynamodb_local_container_version",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 185,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_get_dynamodb_local_java_version",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 211,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_container_exists",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 267,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_container_is_running",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 281,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_restart_container",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 288,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_get_container_port",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 296,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_download_and_extract_jar",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 370,
+      "actions": [
+        "os.remove(tar_path)",
+        "shutil.rmtree(dynamodb_dir)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_try_container_setup",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 420,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if not _check_version_meets_minimum(current_version):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "if i == DynamoDBLocalConfig.MAX_ATTEMPTS - 1:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "_try_java_setup",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 462,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]",
+        "process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)  [via start_java_process() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:742]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if current_version and not _check_version_meets_minimum(current_version):"
+        },
+        {
+          "type": "input_validation",
+          "detail": "if i == DynamoDBLocalConfig.MAX_ATTEMPTS - 1:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get_container_path",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 521,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get_existing_container_dynamodb_local_endpoint",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 573,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "start_container",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 605,
+      "actions": [
+        "return subprocess.run(  [via _run_subprocess_safely() @ awslabs/dynamodb_mcp_server/model_validation_utils.py:97]"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if i == DynamoDBLocalConfig.MAX_ATTEMPTS - 1:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "start_java_process",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 742,
+      "actions": [
+        "process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)"
+      ],
+      "checks": [
+        {
+          "type": "input_validation",
+          "detail": "if i == DynamoDBLocalConfig.MAX_ATTEMPTS - 1:"
+        }
+      ],
+      "missing": [],
+      "verdict": "PARTIALLY_GUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "cleanup_validation_resources",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/bench/awslabs-mcp/src/dynamodb-mcp-server/awslabs/dynamodb_mcp_server/model_validation_utils.py",
+      "line": 884,
+      "actions": [
+        "dynamodb_client.delete_table(TableName=table_name)",
+        "dynamodb_client.delete_table(TableName=table_name)"
+      ],
+      "checks": [],
+      "missing": [
+        "no confirmation step",
+        "no rate limit",
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 271
+}

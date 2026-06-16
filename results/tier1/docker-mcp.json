@@ -1,0 +1,63 @@
+{
+  "version": "0.5.0",
+  "scanned_path": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp",
+  "summary": {
+    "total": 4,
+    "unguarded": 1,
+    "partially_guarded": 0,
+    "guarded": 0,
+    "low_risk": 3
+  },
+  "findings": [
+    {
+      "function": "create-container",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 32,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "deploy-compose",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 69,
+      "actions": [
+        "compose_path = DockerHandlers._save_compose_file(",
+        "result = await DockerHandlers._deploy_stack(compose_path, project_name, debug_info)"
+      ],
+      "checks": [],
+      "missing": [
+        "no auth check"
+      ],
+      "verdict": "UNGUARDED",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "get-logs",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 166,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    },
+    {
+      "function": "list-containers",
+      "file": "/Users/josselin/dev/diplomat-agent/corpus/docker-mcp/src/docker_mcp/handlers.py",
+      "line": 183,
+      "actions": [],
+      "checks": [],
+      "missing": [],
+      "verdict": "LOW_RISK",
+      "acknowledged": false,
+      "contract_violation": "NONE"
+    }
+  ],
+  "scan_time_ms": 22
+}
