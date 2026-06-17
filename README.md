@@ -267,8 +267,8 @@ CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
   in those paths or external packages
 - MCP scanning: Python only (FastMCP / official SDK) — TypeScript/Node MCP servers are out of scope
 - MCP scanning: transport-layer auth (OAuth, token gateway) is invisible — "unguarded" means no guard inside the tool function, independent of transport
-- MCP scanning: `@mcp.tool` attribute decorator only — bare `@tool` (from direct import) is not detected in v1
-- MCP scanning: `@server.call_tool()` low-level dispatcher is detected with a warning; per-tool resolution is not supported in v1
+- MCP scanning: `@mcp.tool` attribute decorator only — bare `@tool` (from direct import) is not detected
+- MCP scanning: `@server.call_tool()` low-level dispatcher is resolved when handler branches are in scan scope; unresolved/out-of-scope branches are surfaced as OPAQUE
 - [Full limitations →](docs/limitations.md)
 
 ## Roadmap

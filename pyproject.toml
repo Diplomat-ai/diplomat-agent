@@ -8,7 +8,7 @@ version = "0.5.3"
 description = "Scan your agentic codebase for unguarded tool calls with real-world side effects"
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []  # zero mandatory runtime dependencies — stdlib only
 
 [project.optional-dependencies]
