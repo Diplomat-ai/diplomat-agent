@@ -114,7 +114,7 @@ Works in your IDE with zero extension to install:
 ```yaml
 repos:
   - repo: https://github.com/Diplomat-ai/diplomat-agent
-    rev: v0.5.2
+    rev: v0.5.3
     hooks:
       - id: diplomat-agent
 ```

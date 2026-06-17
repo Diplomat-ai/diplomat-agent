@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.5.3] — 2026-06-17
+
+> First release published to PyPI. Cumulates all changes since 0.5.0 (the last PyPI release).
+
+### Fixed — MCP false-negatives (dispatcher + executor indirection)
+- **Dispatcher carrier check** (`treat_as_mcp_tool`): `@server.call_tool()` handlers
+  dispatched by a FastMCP/low-level dispatcher were previously analyzed with
+  `module_is_mcp=False`, skipping the OPAQUE floor and producing `LOW_RISK` for writes.
+  Fix: dispatcher passes `treat_as_mcp_tool=True` so handlers are subject to the same
+  honesty floor as direct `@mcp.tool` functions.
+- **Executor callable indirection** (`asyncio.to_thread` / `run_in_executor` / `submit`):
+  when a callable is passed by reference (not as a Call node), the carrier check never
+  fired. Fix: `_has_unresolved_effect_carrier` now inspects the callable argument of
+  known executor functions (`EXECUTOR_CALLABLE_ATTRS`, `EXECUTOR_CALLABLE_ARG_INDEX`).
+  `create-container` (docker-mcp) now correctly surfaces as `OPAQUE`.
+
+### Improved — OPAQUE precision (opaque_reason quality)
+- `_collect_type_bindings` extended with literal type inference:
+  `x = []` → `"list"`, `x = {}` → `"dict"`, `x = ""` → `"str"`, `x = 0` → `"int"`,
+  `x = b""` → `"bytes"`, plus lowercase builtin constructors (`list()`, `dict()`, …).
+- New `_body_stmts()` helper descends into always-executed `try`/`with` bodies so
+  assignments like `port_mappings = []` inside a `try:` block are captured.
+  Result: `create-container` `opaque_reason` now points to `asyncio.wait_for(pull_and_run())`
+  instead of `port_mappings.append(mapping)`.
+
+### Improved — Terminal OPAQUE framing
+- `◐ OPAQUE` added to `_VERDICT_ICONS` and `_VERDICT_LABELS`.
+- Plain and rich tool blocks: honest glose `not a risk rating — effect surface could not
+  be statically resolved (review manually)` + `unresolved at: <reason>`.
+- MCP summary line now includes opaque count: `N opaque (review)`.
+- Rich renderer: OPAQUE displayed in blue (neutral, not alarming).
+
+### Changed — Documentation
+- `docs/landscape.md`: replaced `"MCP server scanning — On the roadmap"` with accurate
+  description of what is shipped vs what is deliberately out of scope.
+- `docs/limitations.md`: new `OPAQUE verdict — by design` section (external library
+  callables, dispatcher indirection, MCP client proxies, `readOnlyHint` not trusted).
+- `README.md`: Verdicts taxonomy table (5 verdicts + Posture column).
+
+### Changed — Packaging / hygiene
+- Corpus, results, and baseline artefacts untracked from git (kept on disk).
+- `[tool.hatch.build.targets.sdist]` exclude list added as belt-and-suspenders.
+- `datetime.datetime.utcnow()` → `datetime.datetime.now(datetime.timezone.utc)`
+  (DeprecationWarning fix, Python 3.9+ compatible).
+
+---
+
 ## [0.5.2] — 2026-06-12
 
 ### Added — Wrapped side-effects (étage 1 + étage 2)

@@ -28,4 +28,11 @@ data/
 
 # Internal verification artifacts
 VERIFICATION_RESULTS.md
+
+# Research corpus (repos clonés — code tiers, non-redistribuable dans le sdist)
+corpus/
+results/
+.baseline*/
+.after/
+.claude/worktrees/
 run_verification.sh

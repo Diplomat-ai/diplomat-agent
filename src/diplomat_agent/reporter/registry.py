@@ -133,7 +133,7 @@ def generate(result: ScanResult, output_path: str | Path, scanned_path: str = ".
     buf.write("\n")
 
     # Metadata
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     buf.write(f"generated: \"{now}\"\n")
     buf.write(f"version: \"{__version__}\"\n")
     buf.write("spec_version: \"1.0\"\n")

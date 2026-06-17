@@ -1,1 +1,0 @@
-Report written to: results/bench/awslabs-s3-tables.json
