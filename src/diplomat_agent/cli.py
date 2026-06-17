@@ -111,6 +111,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable rich terminal formatting even if rich is installed",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show mcp_internal helpers in terminal output (hidden by default)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"diplomat-agent {__version__}",
@@ -141,6 +146,18 @@ def _write_output(content: str, output_path: Path | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Main entry point. Returns exit code."""
+    # Windows consoles default to cp1252; our terminal reporter emits non-ASCII glyphs (⚠, etc.).
+    # Reconfigure stdout/stderr to UTF-8 with replacement so a narrow console degrades gracefully
+    # instead of raising UnicodeEncodeError. No-op on already-UTF-8 streams and on non-reconfigurable
+    # streams (e.g. captured pipes), guarded so it never itself raises.
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfig = getattr(_stream, "reconfigure", None)
+        if callable(_reconfig):
+            try:
+                _reconfig(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
     # Support 'scan' subcommand: strip it so both syntaxes are identical.
     # diplomat-agent scan <path> → diplomat-agent <path>
     if argv is not None:
@@ -268,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
             "unguarded": sum(1 for t in _mcp_tools if t.verdict == "UNGUARDED"),
             "partially_guarded": sum(1 for t in _mcp_tools if t.verdict == "PARTIALLY_GUARDED"),
             "guarded": sum(1 for t in _mcp_tools if t.verdict in ("GUARDED", "LOW_RISK")),
+            "opaque": sum(1 for t in _mcp_tools if t.verdict == "OPAQUE"),
         }
     else:
         mcp_summary = None
@@ -304,9 +322,16 @@ def main(argv: list[str] | None = None) -> int:
     # Terminal/markdown/json output (unless --format registry exclusively)
     if args.format != "registry":
         if args.format == "terminal":
+            _verbose = getattr(args, "verbose", False)
             if output_file:
                 from diplomat_agent.reporter.terminal import render_plain
-                _write_output(render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats), output_file)
+                _write_output(
+                    render_plain(
+                        result, scanned_path, mcp_summary=mcp_summary,
+                        file_stats=file_stats, verbose=_verbose,
+                    ),
+                    output_file,
+                )
             else:
                 from diplomat_agent.reporter.terminal import print_report
                 print_report(
@@ -315,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
                     use_rich=not args.no_rich,
                     mcp_summary=mcp_summary,
                     file_stats=file_stats,
+                    verbose=_verbose,
                 )
 
         elif args.format == "markdown":
@@ -387,10 +413,8 @@ def main(argv: list[str] | None = None) -> int:
                      and t.verdict != "LOW_RISK"]
 
         if baseline_entries is not None:
-            baseline_keys = {(tc.get("function", ""), tc.get("file", ""))
-                             for tc in baseline_entries}
-            new_unchecked = [t for t in unchecked
-                             if (t.name, t.file) not in baseline_keys]
+            from diplomat_agent.reporter.registry import diff_against_baseline
+            new_unchecked = diff_against_baseline(unchecked, baseline_entries)
 
             if new_unchecked:
                 print(

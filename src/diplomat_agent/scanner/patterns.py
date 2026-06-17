@@ -66,6 +66,25 @@ MCP_DISPATCH_DECORATOR_ATTRS: list[str] = ["call_tool"]
 # module even if the originating module is not in MCP_SERVER_IMPORTS.
 MCP_INSTANCE_NAMES: frozenset[str] = frozenset(["mcp", "server", "app"])
 
+# ---------------------------------------------------------------------------
+# MCP client detection patterns (GATE 4)
+# ---------------------------------------------------------------------------
+# Imports that identify a module as an MCP *client* (consumer of an MCP server,
+# not a server itself).
+# Gate: module_is_mcp_client = bool(module_imports & MCP_CLIENT_IMPORTS) and not module_is_mcp
+MCP_CLIENT_IMPORTS: frozenset[str] = frozenset({
+    "mcp",
+    "mcp.client",
+    "mcp.client.streamable_http",
+    "mcp.client.stdio",
+    "mcp.client.sse",
+})
+
+# Session-like receiver names for MCP client call_tool call-site detection.
+# A Call node with attr="call_tool" on one of these receivers inside a function
+# body (NOT a decorator) marks that function as exposure="mcp_client" / OPAQUE.
+MCP_CLIENT_SESSION_NAMES: frozenset[str] = frozenset({"session", "client", "_session"})
+
 # FIX B v1 (v0.5.0) — programmatic tool registration call attributes.
 # Detects mcp.add_tool(fn) / server.add_tool(fn) / app.tool(fn) (call form,
 # not decorator). Only honoured when the receiver name is in
@@ -91,6 +110,91 @@ HELPER_CALL_EXCLUDE_PATTERNS: list[str] = [
     "telemetry",
     "report_metric", "report_metrics",
 ]
+
+# v0.5.2 GATE 1 — benign call name allow-lists for unresolved-effect-carrier
+# detection. Conservative by design (the spec biases toward OPAQUE when in
+# doubt). Used ONLY by _has_unresolved_effect_carrier to avoid flagging
+# stdlib pure-format / introspection / logging calls.
+BENIGN_BUILTIN_NAMES: frozenset[str] = frozenset({
+    # Type constructors / conversions
+    "bool", "bytes", "bytearray", "complex", "dict", "float", "frozenset",
+    "int", "list", "memoryview", "object", "range", "set", "slice", "str",
+    "tuple", "type",
+    # Predicates / iterables
+    "all", "any", "callable", "isinstance", "issubclass", "hasattr",
+    "iter", "next", "len", "min", "max", "sum", "abs", "divmod",
+    "enumerate", "zip", "filter", "map", "reversed", "sorted",
+    # Conversion / formatting
+    "ascii", "bin", "chr", "format", "hash", "hex", "id", "oct",
+    "ord", "repr", "round", "vars", "dir",
+    # Attribute access (read)
+    "getattr",
+    # Pure data ops
+    "asdict", "astuple", "field",
+    # Standard exception constructors that may appear as raise expr in args
+    "exception",
+})
+
+# Pure attribute methods on stdlib types (str / list / dict / set / tuple).
+# An attribute call whose method name is in this set is treated as benign.
+# Also used when the receiver type is not bound (e.g. literals). Only names
+# that are NEVER an external side effect. Do NOT add: send, write, execute*,
+# run, post — those remain carriers.
+
+# Known builtin types whose method calls are never external side effects.
+BUILTIN_TYPES: frozenset[str] = frozenset({
+    "str", "bytes", "int", "float", "bool", "complex",
+    "list", "dict", "set", "frozenset", "tuple", "bytearray",
+})
+
+BENIGN_ATTR_METHODS: frozenset[str] = frozenset({
+    # str methods (all pure)
+    "upper", "lower", "title", "strip", "lstrip", "rstrip",
+    "split", "rsplit", "splitlines", "partition", "rpartition",
+    "join", "replace",
+    "startswith", "endswith", "count", "encode", "decode",
+    "format", "format_map", "casefold", "capitalize", "swapcase",
+    "zfill", "expandtabs", "ljust", "rjust", "center",
+    "isalpha", "isalnum", "isdigit", "isdecimal", "isnumeric",
+    "isspace", "istitle", "isupper", "islower", "isprintable",
+    "isidentifier", "isascii",
+    # dict / list / set read methods — these are always safe reads regardless
+    # of receiver type. Mutators (append, add, update, insert, remove, pop,
+    # extend, clear, discard) are intentionally EXCLUDED here: they must only
+    # be skipped when the receiver type is a known builtin (handled by the
+    # type_bindings check in _has_unresolved_effect_carrier). On an untyped
+    # custom receiver they must remain carriers so OPAQUE fires correctly.
+    "get", "keys", "values", "items", "copy",
+    # json / serialization (no I/O)
+    "dumps", "loads",
+    # pathlib / Path joinpath (pure path math)
+    "joinpath",
+    # ast / typing / inspect introspection
+    "unparse", "parse",
+    # find / index — string lookups (pure read)
+    "find", "rfind", "index", "rindex",
+    # Wait primitives — asyncio.sleep / time.sleep / trio.sleep / anyio.sleep.
+    # On any receiver, `.sleep(...)` is a wait, never an external effect.
+    "sleep",
+})
+
+# Benign receiver/object names — attribute calls on these receivers are
+# considered observability / pure-stdlib and excluded from carrier flagging.
+BENIGN_RECEIVERS: frozenset[str] = frozenset({
+    # Logging / observability
+    "logger", "log", "logging",
+    "ctx", "context", "tracer", "span", "meter", "metrics",
+    "telemetry", "audit",
+    # Stdlib pure modules (no I/O unless explicit attr we recognize)
+    "time", "datetime", "math", "random",
+    "json", "yaml", "toml", "csv", "re", "base64", "hashlib", "uuid",
+    "itertools", "functools", "collections", "typing", "dataclasses",
+    "enum", "abc", "copy", "warnings", "ast", "inspect",
+    # Path types — actual writes carry recognized signatures (Path.write_text,
+    # Path.unlink, …) which the SideEffectVisitor catches. The receiver Name
+    # alone is benign.
+    "path", "pathlib",
+})
 
 SIDE_EFFECT_PATTERNS: list[dict] = [
     # -----------------------------------------------------------------------
@@ -153,13 +257,15 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
     },
     {
         # session.execute() / db.execute() — write unless first arg is select() or SELECT text
+        # Also exclude SET TRANSACTION (read-only transaction setup, not a mutation).
+        # Do NOT add bare "SET" — SET search_path / SET role mutate session state.
         "category": "database_write",
         "risk": 2,
         "match": {
             "obj_contains": ["session", "db", "conn", "connection"],
             "attr_exact": ["execute", "executemany"],
             "first_arg_excludes": ["select"],
-            "sql_excludes": ["SELECT"],
+            "sql_excludes": ["SELECT", "SET TRANSACTION"],
         },
     },
     {
@@ -428,6 +534,24 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
         },
     },
     {
+        # asyncio.create_subprocess_exec / loop.create_subprocess_exec
+        # Covers: await asyncio.create_subprocess_exec(...)
+        #         process = loop.create_subprocess_exec(...)
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["create_subprocess_exec", "create_subprocess_shell"],
+        },
+    },
+    {
+        # bare-name import: from asyncio import create_subprocess_exec
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "name_contains": ["create_subprocess_exec", "create_subprocess_shell"],
+        },
+    },
+    {
         "category": "destructive",
         "risk": 3,
         "match": {
@@ -617,6 +741,42 @@ SIDE_EFFECT_PATTERNS: list[dict] = [
             "attr_exact": ["invoke", "ainvoke"],
         },
     },
+
+    # -----------------------------------------------------------------------
+    # v0.5.2 GATE 6 — narrow SDK verb breadth additions.
+    # These are high-signal, receiver-agnostic verbs that distinctly indicate a
+    # side effect on their own. attr_exact only — keeps the false-positive
+    # surface small. Each verb is documented with its primary SDK source.
+    # -----------------------------------------------------------------------
+    {
+        # asyncpg, psycopg, sqlalchemy async driver — parameterised query exec.
+        # Treated as database_write because parameter binding is the common
+        # pattern for INSERT / UPDATE / DELETE statements; honest floor lets
+        # the OPAQUE path catch the few read-only cases.
+        "category": "database_write",
+        "risk": 2,
+        "match": {
+            "attr_exact": ["execute_query", "execute_param_query"],
+        },
+    },
+    {
+        # Raw socket / SSH client / RPC channel writes. sendall is unambiguous
+        # (no read variant); send_command on a transport is always egress.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["sendall", "send_command"],
+        },
+    },
+    {
+        # AWS Step Functions / Temporal / Argo workflows — kicks off a remote
+        # state machine that runs unsupervised. Irreversible once started.
+        "category": "destructive",
+        "risk": 3,
+        "match": {
+            "attr_exact": ["start_execution"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -654,6 +814,22 @@ READ_ONLY_PATTERNS: list[dict] = [
 # receiver object name. This overrides the http_write obj_contains heuristic
 # so that `client.get_post()` is not flagged as a side effect.
 # Do NOT add: update_, create_, delete_, post_, send_ — those are writes.
+# v0.5.3 GATE 2 — executor dispatch functions that pass a callable by reference.
+# asyncio.to_thread(fn, *args)     → callable at positional index 0
+# loop.run_in_executor(exec, fn)   → callable at positional index 1
+# pool.submit(fn, *args)           → callable at positional index 0
+# Matched by attribute name only; receiver varies (asyncio / loop / pool / ...).
+EXECUTOR_CALLABLE_ATTRS: frozenset[str] = frozenset({
+    "to_thread",        # asyncio.to_thread(fn, *args)
+    "run_in_executor",  # loop.run_in_executor(executor, fn, *args)
+    "submit",           # pool.submit(fn, *args) / executor.submit(fn, *args)
+})
+EXECUTOR_CALLABLE_ARG_INDEX: dict[str, int] = {
+    "to_thread": 0,
+    "run_in_executor": 1,
+    "submit": 0,
+}
+
 READER_METHOD_PREFIXES: tuple[str, ...] = (
     "get_", "list_", "read_", "fetch_",
     "search_", "query_", "find_", "describe_", "show_",

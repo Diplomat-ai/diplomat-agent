@@ -14,10 +14,18 @@ from pathlib import Path
 from diplomat_agent.models import Guard, SideEffect, Tool
 from diplomat_agent.scanner.interprocedural import PackageIndex
 from diplomat_agent.scanner.patterns import (
+    BENIGN_ATTR_METHODS,
+    BENIGN_BUILTIN_NAMES,
+    BENIGN_RECEIVERS,
+    BUILTIN_TYPES,
     EXCLUDED_DIRS,
+    EXECUTOR_CALLABLE_ARG_INDEX,
+    EXECUTOR_CALLABLE_ATTRS,
     EXCLUDED_FILE_PATTERNS,
     GUARD_PATTERNS,
     HELPER_CALL_EXCLUDE_PATTERNS,
+    MCP_CLIENT_IMPORTS,
+    MCP_CLIENT_SESSION_NAMES,
     MCP_DISPATCH_DECORATOR_ATTRS,
     MCP_INSTANCE_NAMES,
     MCP_REGISTRATION_ATTRS,
@@ -443,6 +451,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         self.file_path = file_path
         self.side_effects: list[SideEffect] = []
         self._seen: set[tuple[str, int]] = set()  # dedup by (category, line)
+        # v0.5.2 GATE 1 — ids of Call nodes that matched a SIDE_EFFECT_PATTERN
+        # OR were filtered out as reader-prefix calls (both are "accounted for"
+        # by the scanner and must not be re-flagged as unresolved carriers).
+        self.recognized_call_ids: set[int] = set()
 
     def visit_Call(self, node: ast.Call) -> None:
         # Pre-compute call parts ONCE; pass to _matches_pattern to avoid
@@ -456,6 +468,10 @@ class _SideEffectVisitor(ast.NodeVisitor):
         if obj_name and attr_name and any(
             attr_name.startswith(p) for p in READER_METHOD_PREFIXES
         ):
+            # v0.5.2 GATE 1 — reader-prefix calls are intentionally accounted
+            # for (treated as read-only), so they do not count as unresolved
+            # effect-carriers in _has_unresolved_effect_carrier.
+            self.recognized_call_ids.add(id(node))
             self.generic_visit(node)
             return
         # Dispatch: only check patterns where attr_exact matches (or no
@@ -481,6 +497,9 @@ class _SideEffectVisitor(ast.NodeVisitor):
                 _obj=obj_name,
                 _attr=attr_name,
             ):
+                # v0.5.2 GATE 1 — record this Call as pattern-recognised so
+                # that _has_unresolved_effect_carrier won't double-count it.
+                self.recognized_call_ids.add(id(node))
                 key = (pattern["category"], node.lineno)
                 if key not in self._seen:
                     self._seen.add(key)
@@ -590,6 +609,103 @@ class _EligibleCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _collect_callee_effects(
+    callee_def: "ast.FunctionDef | ast.AsyncFunctionDef",
+    callee_file: Path,
+    package_index: "PackageIndex",
+    depth: int,
+    max_depth: int,
+    visited: set[tuple[str, str]],
+    source_lines_cache: dict[str, list[str]],
+) -> tuple[list[SideEffect], list[Guard]]:
+    """Collect side-effects + guards from an already-resolved callee FunctionDef.
+
+    Shared back-end used by both _resolve_call_effects (Name-call path) and
+    v0.5.2 GATE 5 _resolve_attr_call_effects (Attribute-call path).
+    """
+    import os as _os
+    try:
+        callee_resolved = callee_file.resolve()
+    except (OSError, ValueError):
+        callee_resolved = callee_file
+    callee_norm = _os.path.normcase(str(callee_resolved))
+    root_norm = _os.path.normcase(str(package_index.root))
+    if not callee_norm.startswith(root_norm):
+        return [], []
+
+    callee_path_str = str(callee_file)
+    visit_key = (callee_path_str, callee_def.name)
+    if visit_key in visited:
+        return [], []
+
+    cache = getattr(package_index, "_effects_cache", None)
+    if cache is not None and visit_key in cache:
+        return cache[visit_key]
+
+    if callee_path_str not in source_lines_cache:
+        try:
+            text = callee_file.read_text(encoding="utf-8-sig", errors="replace")
+            source_lines_cache[callee_path_str] = text.splitlines()
+        except (OSError, UnicodeDecodeError):
+            return [], []
+    callee_lines = source_lines_cache[callee_path_str]
+
+    se_visitor = _SideEffectVisitor(callee_lines, callee_path_str)
+    for stmt in callee_def.body:
+        se_visitor.visit(stmt)
+    callee_side_effects: list[SideEffect] = list(se_visitor.side_effects)
+
+    g_visitor = _GuardVisitor(callee_lines, set())
+    g_visitor.visit(callee_def)
+    callee_guards: list[Guard] = list(g_visitor.guards)
+
+    callee_dec_guards = _detect_decorator_guards(
+        callee_def.decorator_list,
+        callee_lines,
+        from_file=callee_file,
+        package_index=package_index,
+    )
+    callee_guards.extend(callee_dec_guards)
+
+    try:
+        rel = str(callee_file.relative_to(package_index.root))
+    except ValueError:
+        rel = callee_file.name
+    via_label = f"[via {callee_def.name}() @ {rel}:{callee_def.lineno}]"
+    callee_side_effects = [
+        SideEffect(
+            category=se.category,
+            evidence=f"{se.evidence}  {via_label}",
+            line=se.line,
+            file=se.file,
+            type=se.type,
+        )
+        for se in callee_side_effects
+    ]
+
+    new_visited = visited | {visit_key}
+    sub_visitor = _EligibleCallVisitor()
+    for stmt in callee_def.body:
+        sub_visitor.visit(stmt)
+    for sub_call in sub_visitor.calls:
+        sub_se, sub_g = _resolve_call_effects(
+            sub_call,
+            callee_path_str,
+            package_index,
+            depth + 1,
+            max_depth,
+            new_visited,
+            source_lines_cache,
+        )
+        callee_side_effects.extend(sub_se)
+        callee_guards.extend(sub_g)
+
+    if cache is not None:
+        cache[visit_key] = (callee_side_effects, callee_guards)
+
+    return callee_side_effects, callee_guards
+
+
 def _resolve_call_effects(
     call: ast.Call,
     from_file: str,
@@ -635,105 +751,640 @@ def _resolve_call_effects(
     if callee_def is None:
         return [], []
 
-    # Stop at stdlib / third-party (anything outside the package root).
-    # Resolve callee_file to normalise Windows short-paths (GUARNE~1 → guarnelli)
-    # before comparing to package_index.root (which is always the long-path form).
-    import os as _os
-    try:
-        callee_resolved = callee_file.resolve()
-    except (OSError, ValueError):
-        callee_resolved = callee_file
-    callee_norm = _os.path.normcase(str(callee_resolved))
-    root_norm = _os.path.normcase(str(package_index.root))
-    if not callee_norm.startswith(root_norm):
-        return [], []
-
-    callee_path_str = str(callee_file)
-    visit_key = (callee_path_str, callee_def.name)
-
-    # Cycle protection.
-    if visit_key in visited:
-        return [], []
-
-    # Memoization (PackageIndex-scoped cache).
-    cache = getattr(package_index, "_effects_cache", None)
-    if cache is not None and visit_key in cache:
-        return cache[visit_key]
-
-    # Read source lines for the callee file (cached per-scan).
-    if callee_path_str not in source_lines_cache:
-        try:
-            text = callee_file.read_text(encoding="utf-8-sig", errors="replace")
-            source_lines_cache[callee_path_str] = text.splitlines()
-        except (OSError, UnicodeDecodeError):
-            return [], []
-    callee_lines = source_lines_cache[callee_path_str]
-
-    # --- Intra-procedural side effects + body guards of the callee. ---
-    se_visitor = _SideEffectVisitor(callee_lines, callee_path_str)
-    for stmt in callee_def.body:
-        se_visitor.visit(stmt)
-    callee_side_effects: list[SideEffect] = list(se_visitor.side_effects)
-
-    g_visitor = _GuardVisitor(callee_lines, set())
-    g_visitor.visit(callee_def)
-    callee_guards: list[Guard] = list(g_visitor.guards)
-
-    # Decorator guards on the callee (symmetric: a helper decorated with
-    # @auth_required still protects its caller's tool).
-    callee_dec_guards = _detect_decorator_guards(
-        callee_def.decorator_list,
-        callee_lines,
-        from_file=callee_file,
-        package_index=package_index,
+    return _collect_callee_effects(
+        callee_def, callee_file, package_index,
+        depth, max_depth, visited, source_lines_cache,
     )
-    callee_guards.extend(callee_dec_guards)
 
-    # Augment side-effect evidence with [via callee_name() @ file:line].
-    try:
-        rel = str(callee_file.relative_to(package_index.root))
-    except ValueError:
-        rel = callee_file.name
-    via_label = f"[via {callee_def.name}() @ {rel}:{callee_def.lineno}]"
-    callee_side_effects = [
-        SideEffect(
-            category=se.category,
-            evidence=f"{se.evidence}  {via_label}",
-            line=se.line,
-            file=se.file,
-            type=se.type,
-        )
-        for se in callee_side_effects
-    ]
 
-    # --- Recursive descent into eligible sub-calls of the callee. ---
-    new_visited = visited | {visit_key}
-    sub_visitor = _EligibleCallVisitor()
-    for stmt in callee_def.body:
-        sub_visitor.visit(stmt)
-    for sub_call in sub_visitor.calls:
-        sub_se, sub_g = _resolve_call_effects(
-            sub_call,
-            callee_path_str,
-            package_index,
-            depth + 1,
-            max_depth,
-            new_visited,
-            source_lines_cache,
-        )
-        callee_side_effects.extend(sub_se)
-        callee_guards.extend(sub_g)
+# ---------------------------------------------------------------------------
+# v0.5.2 GATE 5 — étage 2 attribute-call interproc (certain-only type tracking)
+# ---------------------------------------------------------------------------
+#
+# Resolve obj.method(...) calls when the class of `obj` can be determined with
+# certainty from one of:
+#   - self.method() inside a class body (enclosing_class known)
+#   - Class.method() (PascalCase Name receiver, ClassDef in scope)
+#   - var: SomeClass annotation on a param or local (AnnAssign)
+#   - var = SomeClass(...) plain assignment in the same function (no reassign)
+#
+# This narrows the OPAQUE floor (GATE 1) when we CAN prove the call resolves
+# inside the package — the wrapper's real side effects are then attributed to
+# the calling tool. Anything uncertain → no resolution → OPAQUE floor applies.
 
-    # Memoize.
-    if cache is not None:
-        cache[visit_key] = (callee_side_effects, callee_guards)
 
-    return callee_side_effects, callee_guards
+def _body_stmts(stmts: list[ast.stmt]) -> list[ast.stmt]:
+    """Flatten always-executed statement paths for type-binding collection.
+
+    Descends into try-body and with-body (both always executed before any
+    exception).  Skips except-handlers and else/finally branches (conditional).
+    Only one level of flattening is needed in practice; recursive for safety.
+    """
+    result: list[ast.stmt] = []
+    for s in stmts:
+        result.append(s)
+        if isinstance(s, ast.Try):
+            result.extend(_body_stmts(s.body))
+        elif isinstance(s, (ast.With, ast.AsyncWith)):
+            result.extend(_body_stmts(s.body))
+    return result
+
+
+def _collect_type_bindings(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> dict[str, str]:
+    """Return {var_name → class_name} for vars whose type can be proven inside func.
+
+    Sources (all conservative, only Name-typed):
+      1. param annotations  def f(x: Foo)              → {"x": "Foo"}
+      2. AnnAssign           x: Foo = ...               → {"x": "Foo"}
+      3a. plain Assign        x = []  / x = {}  / x = "" / x = 0 / x = b""
+          literal nodes      → {"x": "list"} / {"x": "dict"} / … (BUILTIN_TYPES)
+      3b. plain Assign        x = Foo(...)               → {"x": "Foo"}
+          (PascalCase ctor; rejects foo(), self.foo(), Foo.bar())
+      3c. plain Assign        x = list() / x = dict() / …
+          builtin ctors      → {"x": "list"} / … (BUILTIN_TYPES)
+
+    The walk descends into try/with always-executed bodies so that assignments
+    like  port_mappings = []  inside a try-block are captured.
+
+    Reassignment policy: if the same name appears twice with different types,
+    drop the binding entirely (uncertain).
+    """
+    bindings: dict[str, str] = {}
+    reassigned: set[str] = set()
+
+    # 1. param annotations
+    for arg in (
+        func_node.args.args + func_node.args.posonlyargs + func_node.args.kwonlyargs
+    ):
+        if arg.annotation is not None and isinstance(arg.annotation, ast.Name):
+            bindings[arg.arg] = arg.annotation.id
+
+    # 2 + 3. body assignments — walk always-executed paths (try/with bodies included)
+    for stmt in _body_stmts(func_node.body):
+        if isinstance(stmt, ast.AnnAssign):
+            if (
+                isinstance(stmt.target, ast.Name)
+                and isinstance(stmt.annotation, ast.Name)
+            ):
+                name = stmt.target.id
+                if name in bindings and bindings[name] != stmt.annotation.id:
+                    reassigned.add(name)
+                else:
+                    bindings[name] = stmt.annotation.id
+        elif isinstance(stmt, ast.Assign):
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                continue
+            name = stmt.targets[0].id
+            val = stmt.value
+            # 3a. Literal nodes (x = [], x = {}, x = "", x = 0, x = b"", …)
+            inferred: str | None = None
+            if isinstance(val, ast.List):
+                inferred = "list"
+            elif isinstance(val, ast.Dict):
+                inferred = "dict"
+            elif isinstance(val, ast.Set):
+                inferred = "set"
+            elif isinstance(val, ast.Tuple):
+                inferred = "tuple"
+            elif isinstance(val, ast.Constant):
+                if isinstance(val.value, bytes):
+                    inferred = "bytes"
+                elif isinstance(val.value, str):
+                    inferred = "str"
+                elif isinstance(val.value, (int, float)):
+                    inferred = "int"
+            elif isinstance(val, ast.Call):
+                ctor = val.func
+                # 3b. PascalCase constructors (e.g. MyClass())
+                # 3c. builtin lowercase constructors — reuse BUILTIN_TYPES
+                if isinstance(ctor, ast.Name) and ctor.id:
+                    if ctor.id[0].isupper():
+                        inferred = ctor.id
+                    elif ctor.id in BUILTIN_TYPES:
+                        inferred = ctor.id
+                    elif name in bindings:
+                        # Unknown call reassigns a bound name — type becomes uncertain
+                        reassigned.add(name)
+            if inferred is not None:
+                if name in bindings and bindings[name] != inferred:
+                    reassigned.add(name)
+                else:
+                    bindings[name] = inferred
+
+    for name in reassigned:
+        bindings.pop(name, None)
+    return bindings
+
+
+def _attr_call_class_method(
+    call: ast.Call,
+    enclosing_class: str | None,
+    type_bindings: dict[str, str],
+) -> tuple[str, str] | None:
+    """Map an obj.method(...) Call to (class_name, method_name), certain-only.
+
+    Returns None when:
+      - call.func is not an Attribute
+      - receiver is not a single Name (chained attrs like a.b.c are rejected)
+      - receiver is not in {self (with enclosing_class), PascalCase, type_bindings}
+    """
+    func = call.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    if not isinstance(func.value, ast.Name):
+        return None
+    recv = func.value.id
+    method = func.attr
+    if not method:
+        return None
+
+    if recv == "self" and enclosing_class:
+        return enclosing_class, method
+    if recv in type_bindings:
+        return type_bindings[recv], method
+    if recv and recv[0].isupper():
+        return recv, method
+    return None
+
+
+def _resolve_attr_call_effects(
+    call: ast.Call,
+    enclosing_class: str | None,
+    type_bindings: dict[str, str],
+    from_file: str,
+    package_index: "PackageIndex | None",
+    depth: int,
+    max_depth: int,
+    visited: set[tuple[str, str]],
+    source_lines_cache: dict[str, list[str]],
+) -> tuple[list[SideEffect], list[Guard]]:
+    """v0.5.2 GATE 5 — attribute-call interproc with certain-only type tracking."""
+    if package_index is None:
+        return [], []
+    if depth >= max_depth:
+        return [], []
+
+    resolved = _attr_call_class_method(call, enclosing_class, type_bindings)
+    if resolved is None:
+        return [], []
+
+    class_name, method_name = resolved
+    method_def, method_file = package_index.lookup_class_method(
+        class_name, method_name, Path(from_file)
+    )
+    if method_def is None:
+        return [], []
+
+    return _collect_callee_effects(
+        method_def, method_file, package_index,
+        depth, max_depth, visited, source_lines_cache,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Function analysis
 # ---------------------------------------------------------------------------
+
+
+def _has_mcp_client_call_tool(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Return True if the function body contains an <obj>.call_tool(...) call
+
+    where obj.id (lowercased) is one of MCP_CLIENT_SESSION_NAMES
+    (session / client / _session).  Only Call nodes are checked — decorators
+    are intentionally excluded per GATE 4 spec.
+    """
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr != "call_tool":
+            continue
+        recv = func.value
+        if isinstance(recv, ast.Name) and recv.id.lower() in MCP_CLIENT_SESSION_NAMES:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# GATE 5 — Dispatcher resolution
+# ---------------------------------------------------------------------------
+
+def _if_branch_key(test: ast.expr) -> "str | None":
+    """Extract the string key from an if-condition like `name == "key"` or `"key" == name`."""
+    if not isinstance(test, ast.Compare):
+        return None
+    if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+        return None
+    if len(test.comparators) != 1:
+        return None
+    left, right = test.left, test.comparators[0]
+    if isinstance(right, ast.Constant) and isinstance(right.value, str):
+        return right.value
+    if isinstance(left, ast.Constant) and isinstance(left.value, str):
+        return left.value
+    return None
+
+
+def _match_case_key(pattern: ast.expr) -> "str | None":
+    """Extract the string key from a match-case pattern (MatchValue of Constant or Attribute)."""
+    # ast.Match is Python 3.10+; guard against older interpreters at import-time
+    match_value_type = getattr(ast, "MatchValue", None)
+    if match_value_type is None or not isinstance(pattern, match_value_type):
+        return None
+    val = pattern.value
+    if isinstance(val, ast.Constant) and isinstance(val.value, str):
+        return val.value
+    # Enum.MEMBER — use the member name as the key
+    if isinstance(val, ast.Attribute) and isinstance(val.value, ast.Name):
+        return val.attr
+    return None
+
+
+def _extract_dispatch_branches(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> "list[tuple[str, list]]":
+    """Return [(key, branch_stmts)] extracted from if/elif chains and match/case in func_node.
+
+    Visits the function body (non-recursive into nested functions).
+    """
+    branches: list[tuple[str, list]] = []
+    match_type = getattr(ast, "Match", None)
+
+    def _walk_stmts(stmts: list) -> None:
+        for stmt in stmts:
+            if match_type and isinstance(stmt, match_type):
+                for case in stmt.cases:
+                    key = _match_case_key(case.pattern)
+                    if key is not None:
+                        branches.append((key, case.body))
+            elif isinstance(stmt, ast.If):
+                key = _if_branch_key(stmt.test)
+                if key is not None:
+                    branches.append((key, stmt.body))
+                # Walk the orelse chain for elif/else
+                _walk_stmts(stmt.orelse)
+            elif isinstance(stmt, (ast.Try, ast.With, ast.AsyncWith)):
+                # Peek inside try bodies but not nested functions
+                body = getattr(stmt, "body", [])
+                _walk_stmts(body)
+            # Do NOT recurse into nested FunctionDef/AsyncFunctionDef
+
+    _walk_stmts(func_node.body)
+    return branches
+
+
+_TEXT_CONTENT_NAMES: frozenset[str] = frozenset({
+    "TextContent", "types.TextContent", "ImageContent", "EmbeddedResource",
+})
+
+
+def _find_first_handler_call(stmts: list) -> "ast.Call | None":
+    """Return the first ast.Call in branch_stmts that is not a TextContent constructor."""
+    for stmt in stmts:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                func_name = ast.unparse(node.func).split("(")[0]
+                if func_name in _TEXT_CONTENT_NAMES:
+                    continue
+                return node
+    return None
+
+
+def _resolve_handler_callable(
+    call_node: ast.Call,
+    tree: ast.Module,
+    from_file: "Path",
+    package_index: "PackageIndex | None",
+) -> "tuple[ast.FunctionDef | ast.AsyncFunctionDef | None, Path]":
+    """Resolve a handler call node to its FunctionDef.
+
+    Handles:
+    - Name('func')(...) — same-file or cross-file top-level function
+    - Attribute(Name('Class'), 'method')(...) — class method, same-file or cross-file
+    """
+    func = call_node.func
+    # Unwrap awaitables: await f(...) is parsed as Await(value=Call(...)) — the func attr
+    # of the Call already gives us what we need, so nothing extra needed here.
+
+    if isinstance(func, ast.Name):
+        # Plain call: func_name(args)
+        name = func.id
+        if package_index is not None:
+            def_node, def_file = package_index._lookup_def(name, from_file)
+            if def_node is not None:
+                return def_node, def_file
+        # Same-file fallback (package_index=None in tests)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                return node, from_file
+        return None, from_file
+
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        # Class.method(args)
+        class_name = func.value.id
+        method_name = func.attr
+        if package_index is not None:
+            def_node, def_file = package_index.lookup_class_method(class_name, method_name, from_file)
+            if def_node is not None:
+                return def_node, def_file
+        # Same-file fallback
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == method_name
+                    ):
+                        return item, from_file
+        return None, from_file
+
+    return None, from_file
+
+
+def _resolve_dispatcher(
+    dispatcher_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    tree: ast.Module,
+    source_lines: list[str],
+    file_path: str,
+    package_index: "PackageIndex | None",
+    interproc_source_cache: "dict[str, list[str]] | None",
+) -> "tuple[list[Tool], set[int]]":
+    """Resolve a @*.call_tool dispatcher into one Tool per dispatched branch.
+
+    Returns (tools, handler_node_ids) where handler_node_ids are the ast node ids
+    of resolved handler FunctionDefs in the same file (so scan_file can skip them
+    in the main analysis loop and avoid double-emitting them as 'internal' tools).
+
+    For each if/elif or match/case branch:
+    - Finds the first handler call in the branch body.
+    - Resolves it to a FunctionDef (same-file Name, same-file or cross-file Class.method).
+    - Calls _analyze_function on the resolved handler to get real side effects + guards.
+    - Returns a Tool with name=branch_key, exposure="mcp_tool".
+
+    Unresolvable branches produce a Tool with opaque_reason set → OPAQUE verdict.
+    """
+    from diplomat_agent.models import Tool  # local import to avoid circular at module level
+
+    fp = Path(file_path)
+    branches = _extract_dispatch_branches(dispatcher_node)
+    if not branches:
+        return [], set()
+
+    result: list[Tool] = []
+    # (file_path_str, lineno) pairs for same-file handlers to skip in the main loop.
+    # We use location instead of id() because PackageIndex re-parses files, so
+    # the AST node objects differ from scan_file's tree despite being the same source.
+    handler_locs: set[tuple[str, int]] = set()
+
+    for key, branch_stmts in branches:
+        handler_call = _find_first_handler_call(branch_stmts)
+
+        if handler_call is None:
+            # Branch has no callable (e.g. `return []`) — LOW_RISK, no opaque_reason
+            result.append(Tool(
+                name=key,
+                file=file_path,
+                line=dispatcher_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+            ))
+            continue
+
+        handler_def, handler_path = _resolve_handler_callable(handler_call, tree, fp, package_index)
+
+        if handler_def is None:
+            result.append(Tool(
+                name=key,
+                file=file_path,
+                line=dispatcher_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+                opaque_reason="dispatcher handler not in scan unit — not analyzed",
+            ))
+            continue
+
+        # Track same-file handler locations so the main loop can skip re-analysis
+        if handler_path == fp:
+            handler_locs.add((str(fp), handler_def.lineno))
+
+        # Load source lines for the handler file
+        handler_path_str = str(handler_path)
+        if handler_path == fp:
+            handler_source_lines = source_lines
+        elif interproc_source_cache and handler_path_str in interproc_source_cache:
+            handler_source_lines = interproc_source_cache[handler_path_str]
+        else:
+            try:
+                raw = handler_path.read_text(encoding="utf-8-sig", errors="replace")
+                handler_source_lines = raw.splitlines()
+                if interproc_source_cache is not None:
+                    interproc_source_cache[handler_path_str] = handler_source_lines
+            except (OSError, ValueError):
+                handler_source_lines = []
+
+        # Collect imports of the handler module so _analyze_function can use them
+        try:
+            handler_tree = ast.parse(
+                "\n".join(handler_source_lines), filename=handler_path_str
+            )
+            handler_imports = _collect_imports(handler_tree)
+        except SyntaxError:
+            handler_imports = set()
+
+        tool = _analyze_function(
+            func_node=handler_def,
+            source_lines=handler_source_lines,
+            file_path=handler_path_str,
+            module_imports=handler_imports,
+            package_index=package_index,
+            module_is_mcp=False,
+            module_is_mcp_client=False,
+            programmatic_mcp_tools=None,
+            interproc_source_cache=interproc_source_cache,
+            treat_as_mcp_tool=True,  # v0.5.3 GATE 1: apply OPAQUE floor to dispatcher handlers
+        )
+
+        if tool is None:
+            # Handler resolved but has no detectable write side effects → LOW_RISK
+            tool = Tool(
+                name=key,
+                file=handler_path_str,
+                line=handler_def.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_tool",
+                exposure_evidence=f"@*.call_tool dispatcher [{key}]",
+            )
+        else:
+            tool.name = key
+            tool.exposure = "mcp_tool"
+            tool.exposure_evidence = f"@*.call_tool dispatcher [{key}]"
+
+        result.append(tool)
+
+    return result, handler_locs
+
+
+def _parse_tool_annotations(decorator: ast.Call) -> "tuple[bool | None, bool | None]":
+    """Parse readOnlyHint and destructiveHint from a @mcp.tool(...) decorator AST node.
+
+    Supports two shapes:
+    - @mcp.tool(readOnlyHint=True, destructiveHint=False, ...)
+    - @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, ...), ...)
+
+    Returns (readonly_hint, destructive_hint). Any non-Constant boolean value → None.
+    Never raises; returns (None, None) on any unexpected structure.
+    """
+    def _read_bool_kwarg(keywords: list, name: str) -> "bool | None":
+        for kw in keywords:
+            if kw.arg == name and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, bool):
+                return kw.value.value
+        return None
+
+    readonly: "bool | None" = None
+    destructive: "bool | None" = None
+
+    try:
+        # Check direct kwargs first: @mcp.tool(readOnlyHint=True, ...)
+        readonly = _read_bool_kwarg(decorator.keywords, "readOnlyHint")
+        destructive = _read_bool_kwarg(decorator.keywords, "destructiveHint")
+
+        # If not found directly, look inside annotations=ToolAnnotations(...)
+        if readonly is None or destructive is None:
+            for kw in decorator.keywords:
+                if kw.arg == "annotations" and isinstance(kw.value, ast.Call):
+                    inner = kw.value
+                    if readonly is None:
+                        readonly = _read_bool_kwarg(inner.keywords, "readOnlyHint")
+                    if destructive is None:
+                        destructive = _read_bool_kwarg(inner.keywords, "destructiveHint")
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+
+    return readonly, destructive
+
+
+# ---------------------------------------------------------------------------
+# v0.5.2 GATE 1 — Unresolved-effect-carrier detection (étage 1 honesty floor)
+# ---------------------------------------------------------------------------
+# Goal: a tool whose effect surface we cannot resolve must surface as OPAQUE,
+# never vanish, never read as clean. Returns the source-evidence of the first
+# call that looks like an effect-carrier we did not account for, or None when
+# the body is genuinely pure / only contains accounted-for calls.
+#
+# Bias: when in doubt, treat the call as an unresolved carrier (return its
+# source). Negative fixtures (pure_tool, readonly_logging_tool) gate the
+# conservative end via _BENIGN_* allow-lists; benchmark GATE 7 gates the
+# permissive end via FP=STOP.
+def _has_unresolved_effect_carrier(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    recognized_call_ids: set[int],
+    source_lines: list[str],
+    type_bindings: "dict[str, str] | None" = None,
+) -> str | None:
+    """Return source-evidence of the first unresolved effect-carrier Call, or None."""
+    # Walk only the function body, not the decorator list — decorators like
+    # @mcp.tool() would otherwise be mistaken for effect carriers.
+    body_calls: list[ast.Call] = []
+    for stmt in func_node.body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                body_calls.append(node)
+    for node in body_calls:
+        if id(node) in recognized_call_ids:
+            continue
+        _full, obj, attr = _call_parts(node)
+
+        # Attribute call (obj.method(), self.method(), a.b.c())
+        if isinstance(node.func, ast.Attribute):
+            # v0.5.3 GATE 2 — executor callable detection.
+            # asyncio.to_thread(fn, *args), loop.run_in_executor(exec, fn),
+            # pool.submit(fn, *args): the real effect-carrier is the callable
+            # argument passed by reference (an ast.Attribute/ast.Name, not a
+            # Call). Inspect it; return evidence when non-benign, skip when
+            # benign. This fires before the generic attribute-call check so that
+            # a benign callable (e.g. json.dumps) silences the executor call too.
+            if attr in EXECUTOR_CALLABLE_ATTRS:
+                callable_idx = EXECUTOR_CALLABLE_ARG_INDEX.get(attr, 0)
+                if len(node.args) > callable_idx:
+                    callable_arg = node.args[callable_idx]
+                    if isinstance(callable_arg, ast.Attribute):
+                        c_attr = callable_arg.attr.lower() if callable_arg.attr else ""
+                        if (
+                            c_attr not in BENIGN_ATTR_METHODS
+                            and not any(c_attr.startswith(p) for p in READER_METHOD_PREFIXES)
+                            and not _is_excluded_helper_name(c_attr)
+                        ):
+                            return _src(callable_arg, source_lines) or _src(node, source_lines)
+                        continue  # benign callable attribute → executor call is clean
+                    elif isinstance(callable_arg, ast.Name):
+                        cname = callable_arg.id
+                        clow = cname.lower()
+                        if (
+                            clow not in BENIGN_BUILTIN_NAMES
+                            and not _is_excluded_helper_name(clow)
+                            and not (cname and cname[0].isupper())
+                        ):
+                            return _src(callable_arg, source_lines) or _src(node, source_lines)
+                        continue  # benign callable name → executor call is clean
+                # No recognisable callable arg → fall through to generic attribute check.
+            if attr in BENIGN_ATTR_METHODS:
+                continue
+            if attr and any(attr.startswith(p) for p in READER_METHOD_PREFIXES):
+                continue
+            if _is_excluded_helper_name(attr):
+                continue
+            # Receiver-based skip: logger.*, ctx.*, json.*, os.path.*, …
+            if obj:
+                obj_first = obj.split(".", 1)[0]
+                obj_last = obj.rsplit(".", 1)[-1]
+                if obj_first in BENIGN_RECEIVERS or obj_last in BENIGN_RECEIVERS:
+                    continue
+                if obj in BENIGN_RECEIVERS:
+                    continue
+            # type_bindings check: if the direct receiver is a single Name
+            # whose type is a known builtin, the method is never an external
+            # side effect (diplomat ignores in-memory mutation).
+            if (
+                type_bindings is not None
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+            ):
+                recv_name = node.func.value.id
+                if type_bindings.get(recv_name) in BUILTIN_TYPES:
+                    continue
+            # Unresolved attribute call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+        # Bare Name call: foo(...)
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+            low = name.lower()
+            if low in BENIGN_BUILTIN_NAMES:
+                continue
+            if _is_excluded_helper_name(low):
+                continue
+            # PascalCase: likely class/exception constructor — skip (bias against FP).
+            if name and name[0].isupper():
+                continue
+            # Unresolved bare-Name call → effect-carrier candidate.
+            return _src(node, source_lines)
+
+    return None
 
 
 def _analyze_function(
@@ -743,15 +1394,31 @@ def _analyze_function(
     module_imports: set[str],
     package_index: "PackageIndex | None" = None,
     module_is_mcp: bool = False,
+    module_is_mcp_client: bool = False,
     programmatic_mcp_tools: "set[str] | None" = None,
     interproc_source_cache: "dict[str, list[str]] | None" = None,
+    enclosing_class: str | None = None,
+    treat_as_mcp_tool: bool = False,
 ) -> Tool | None:
-    """Analyze a single function/method and return a Tool if it has side effects."""
+    """Analyze a single function/method and return a Tool if it has side effects.
+
+    ``treat_as_mcp_tool`` (v0.5.3 GATE 1): when True, apply the OPAQUE honesty
+    floor even though ``module_is_mcp`` is False.  Used for dispatcher-resolved
+    handlers so that an unresolved effect-carrier surfaces as OPAQUE rather than
+    being dropped as None → LOW_RISK by the caller.
+    """
     # --- Collect intra-procedural side effects (body only, skip decorators) ---
     se_visitor = _SideEffectVisitor(source_lines, file_path)
     for stmt in func_node.body:
         se_visitor.visit(stmt)
     side_effects = list(se_visitor.side_effects)
+    # v0.5.2 GATE 1 — track Call ids the scanner has accounted for. Starts
+    # with the pattern-recognised + reader-prefix-suppressed calls; we add
+    # interproc-resolved sub_calls below.
+    recognized_call_ids: set[int] = set(se_visitor.recognized_call_ids)
+
+    # v0.5.2 GATE 5 — certain-only type bindings used by attribute-call interproc.
+    type_bindings = _collect_type_bindings(func_node)
 
     # --- FIX A v1 (v0.5.0): inter-procedural side-effect / guard tracing ---
     # Walk eligible sub-calls of the function body (return-value-used only)
@@ -776,8 +1443,39 @@ def _analyze_function(
             )
             if extra_se:
                 side_effects.extend(extra_se)
+                recognized_call_ids.add(id(sub_call))
             if extra_g:
                 interproc_guards.extend(extra_g)
+                recognized_call_ids.add(id(sub_call))
+
+        # v0.5.2 GATE 5 — attribute-call interproc (étage 2). Walk attribute
+        # sub-calls whose receiver can be statically typed (self / Class /
+        # annotated var) and pull in their effects + guards just like the
+        # Name-call path above.
+        for sub_call in ast.walk(func_node):
+            if not isinstance(sub_call, ast.Call):
+                continue
+            if not isinstance(sub_call.func, ast.Attribute):
+                continue
+            if id(sub_call) in recognized_call_ids:
+                continue
+            extra_se, extra_g = _resolve_attr_call_effects(
+                sub_call,
+                enclosing_class,
+                type_bindings,
+                file_path,
+                package_index,
+                depth=0,
+                max_depth=_DEFAULT_INTERPROC_DEPTH,
+                visited=set(),
+                source_lines_cache=interproc_source_cache,
+            )
+            if extra_se:
+                side_effects.extend(extra_se)
+                recognized_call_ids.add(id(sub_call))
+            if extra_g:
+                interproc_guards.extend(extra_g)
+                recognized_call_ids.add(id(sub_call))
 
     # FIX A v1 dedup — keyed on (file, category, line) to support multi-file
     # tracing without artificial double-counting.
@@ -791,13 +1489,61 @@ def _analyze_function(
                 deduped.append(se)
         side_effects = deduped
 
-    if not side_effects:
+    # GATE 4 — MCP client call_tool detection.
+    # A function that calls session/client/_session.call_tool(...) in its body
+    # is an opaque proxy to a remote MCP server.  It may have no local side
+    # effects that our patterns catch, so we must bypass the "no side effects →
+    # None" gate for these functions.
+    is_mcp_client_proxy = module_is_mcp_client and _has_mcp_client_call_tool(func_node)
+
+    if not side_effects and not is_mcp_client_proxy:
+        # v0.5.2 GATE 1 — étage 1 honesty floor: an MCP-exposed function whose
+        # effect surface we cannot resolve becomes OPAQUE, never None. A non-MCP
+        # internal helper with no detected effects still drops (no noise).
+        # v0.5.3 GATE 1 — treat_as_mcp_tool extends the same floor to
+        # dispatcher-resolved handlers (module_is_mcp=False in that path).
+        if module_is_mcp or treat_as_mcp_tool:
+            carrier_src = _has_unresolved_effect_carrier(
+                func_node, recognized_call_ids, source_lines, type_bindings
+            )
+            if carrier_src is not None:
+                # Pre-compute exposure (mcp_tool via decorator/programmatic,
+                # else mcp_internal). Mirrors the post-guard logic below.
+                op_exposure = "mcp_internal"
+                op_evidence = ""
+                for dec in func_node.decorator_list:
+                    dec_unparsed = ast.unparse(dec)
+                    dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
+                    if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
+                        op_exposure = "mcp_tool"
+                        op_evidence = "@" + dec_unparsed[:80]
+                        break
+                if op_exposure == "mcp_internal" and programmatic_mcp_tools:
+                    if func_node.name in programmatic_mcp_tools:
+                        op_exposure = "mcp_tool"
+                        op_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
+                # v0.5.3 GATE 1 — dispatcher handler: no decorator, so always
+                # promote to mcp_tool with the routing key as evidence.
+                if op_exposure == "mcp_internal" and treat_as_mcp_tool:
+                    op_exposure = "mcp_tool"
+                    op_evidence = f"@*.call_tool dispatcher [{func_node.name}]"
+                return Tool(
+                    name=func_node.name,
+                    file=file_path,
+                    line=func_node.lineno,
+                    params=[],
+                    side_effects=[],
+                    guards=[],
+                    exposure=op_exposure,
+                    exposure_evidence=op_evidence,
+                    opaque_reason=f"effect surface behind unresolved call: {carrier_src}",
+                )
         return None
 
     # --- Filter out pure read-only functions ---
     # A function is read-only only if ALL its detected patterns are read-only.
     write_effects = [se for se in side_effects if se.category != "read"]
-    if not write_effects:
+    if not write_effects and not is_mcp_client_proxy:
         return None
 
     # --- Extract parameters ---
@@ -856,26 +1602,42 @@ def _analyze_function(
         if auto_retried:
             break
 
-    # --- Detect MCP tool exposure ---
-    # Heuristic: if the module imports an MCP server package (module_is_mcp gate)
-    # and the function has an @<instance>.tool decorator, it is an MCP-exposed tool.
-    # We match on the final attribute name only (not the instance variable name),
-    # which covers @mcp.tool, @app.tool, @server.tool regardless of variable name.
-    # NOTE: bare @tool (from fastmcp import tool) is NOT matched in v1 — the
-    # attribute-based pattern covers >95% of real-world cases with lower FP risk.
-    # NOTE: a @mcp.tool with no detected side effects returns None from this
-    # function, so only tools with real-world side effects appear in the output.
-    # This is intentional: read-only MCP tools have no concern; the denominator
-    # for MCP benchmarks is "MCP tools with real-world side effects detected".
+    # --- Detect MCP tool / client exposure ---
+    # Priority: mcp_client (GATE 4) > mcp_tool (server-side).
+    # module_is_mcp_client is only True when module_is_mcp is False (mutually
+    # exclusive by construction in scan_file), so the ordering is safe.
     exposure = "internal"
     exposure_evidence = ""
-    if module_is_mcp:
+    readonly_hint: "bool | None" = None
+    destructive_hint: "bool | None" = None
+
+    # GATE 4 — MCP client: function body contains <session|client|_session>.call_tool(...)
+    if is_mcp_client_proxy:
+        exposure = "mcp_client"
+        # exposure_evidence is the call site line; best-effort from write_effects or body.
+        for node in ast.walk(func_node):
+            if not isinstance(node, ast.Call):
+                continue
+            func_ast = node.func
+            if (
+                isinstance(func_ast, ast.Attribute)
+                and func_ast.attr == "call_tool"
+                and isinstance(func_ast.value, ast.Name)
+                and func_ast.value.id.lower() in MCP_CLIENT_SESSION_NAMES
+            ):
+                exposure_evidence = _src(node, source_lines)
+                break
+
+    if module_is_mcp and exposure == "internal":
         for dec in func_node.decorator_list:
             dec_unparsed = ast.unparse(dec)
             dec_parts = dec_unparsed.split("(")[0].rsplit(".", 1)
             if len(dec_parts) == 2 and dec_parts[1] in MCP_TOOL_DECORATOR_ATTRS:
                 exposure = "mcp_tool"
                 exposure_evidence = "@" + dec_unparsed[:80]
+                # Parse ToolAnnotations hints from the decorator AST node
+                if isinstance(dec, ast.Call):
+                    readonly_hint, destructive_hint = _parse_tool_annotations(dec)
                 break
         # FIX B v1 (v0.5.0) — programmatic registration via mcp.add_tool(fn)
         # promotes the referenced function to mcp_tool exposure.
@@ -883,6 +1645,14 @@ def _analyze_function(
             if func_node.name in programmatic_mcp_tools:
                 exposure = "mcp_tool"
                 exposure_evidence = f"mcp.add_tool({func_node.name}) [programmatic]"
+
+    # GATE 6 — reclassify internal helpers inside MCP modules as mcp_internal so
+    # the terminal reporter can fold them by default (--verbose to expand).
+    # This is a presentation-only change: JSON does not serialize "internal" or
+    # "mcp_internal" exposure values (only "mcp_tool" is serialised), so JSON
+    # output is byte-identical regardless of this reclassification.
+    if exposure == "internal" and module_is_mcp:
+        exposure = "mcp_internal"
 
     # --- Detect # diplomat:ok / # canary:ok / # checked:ok inline comments ---
     ignored = False
@@ -928,7 +1698,23 @@ def _analyze_function(
             if ignored:
                 break
 
-    return Tool(
+    # v0.5.2 GATE 3 — mcp_client proxies must carry a non-empty opaque_reason
+    # so downstream consumers (JSON, registry, terminal) see why the verdict is
+    # OPAQUE. Use the call-site evidence when available, otherwise a generic
+    # default.
+    opaque_reason = ""
+    if exposure == "mcp_client":
+        if exposure_evidence:
+            opaque_reason = (
+                f"mcp_client proxy: remote tool semantics not in scan unit "
+                f"({exposure_evidence})"
+            )
+        else:
+            opaque_reason = (
+                "mcp_client proxy: remote tool semantics not in scan unit"
+            )
+
+    tool = Tool(
         name=func_node.name,
         file=file_path,
         line=func_node.lineno,
@@ -942,7 +1728,11 @@ def _analyze_function(
         ignore_reason=ignore_reason,
         exposure=exposure,
         exposure_evidence=exposure_evidence,
+        readonly_hint=readonly_hint,
+        destructive_hint=destructive_hint,
+        opaque_reason=opaque_reason,
     )
+    return tool
 
 
 # ---------------------------------------------------------------------------
@@ -987,6 +1777,12 @@ def scan_file(
     # Detect MCP server context via import-based gate
     module_is_mcp = bool(module_imports & {s.lower() for s in MCP_SERVER_IMPORTS})
 
+    # GATE 4 — Detect MCP client context.
+    # A module is an MCP client when it imports from MCP_CLIENT_IMPORTS AND is
+    # not simultaneously an MCP server (the two roles are mutually exclusive in
+    # practice and the server imports take precedence).
+    module_is_mcp_client = bool(module_imports & MCP_CLIENT_IMPORTS) and not module_is_mcp
+
     # FIX 3 — extended gate: detect @<name>.tool() in files that import an MCP
     # instance from a local/shared module (e.g. `from .server import mcp`).
     # Without this, files like `src/tools/redis_tools.py` that do
@@ -1014,28 +1810,17 @@ def scan_file(
                             module_is_mcp = True
                             break
 
-    # Warn once per file when a low-level @.call_tool dispatcher is present.
-    # Per-tool resolution for this pattern is not supported in v1; FastMCP
-    # @mcp.tool is fully supported.
+    # GATE 5 — collect @*.call_tool dispatcher nodes for per-tool resolution.
+    _dispatcher_nodes: list = []
     if module_is_mcp:
-        _found_dispatch = False
         for _node in ast.walk(tree):
-            if _found_dispatch:
-                break
             if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for _dec in _node.decorator_list:
                     _dec_parts = ast.unparse(_dec).split("(")[0].rsplit(".", 1)
                     if len(_dec_parts) == 2 and _dec_parts[1] in MCP_DISPATCH_DECORATOR_ATTRS:
-                        print(
-                            f"\u26a0 low-level MCP dispatcher detected (@server.call_tool) in "
-                            f"{file_path} \u2014 per-tool analysis not supported in v1; "
-                            f"FastMCP @mcp.tool is fully supported.",
-                            file=sys.stderr,
-                        )
-                        # FIX 4 — track dispatcher files for stats / reporting
+                        _dispatcher_nodes.append(_node)
                         if _dispatcher_files is not None:
                             _dispatcher_files.append(str(file_path))
-                        _found_dispatch = True
                         break
 
     # FIX B v1 (v0.5.0) — collect programmatically-registered MCP tool names.
@@ -1050,32 +1835,109 @@ def scan_file(
             if not isinstance(_node, ast.Call):
                 continue
             _func = _node.func
-            if not isinstance(_func, ast.Attribute):
+
+            # Direct form: mcp.add_tool(fn) / mcp.tool(fn).
+            if isinstance(_func, ast.Attribute):
+                if _func.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _func.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
                 continue
-            if _func.attr not in MCP_REGISTRATION_ATTRS:
-                continue
-            # Receiver must be one of MCP_INSTANCE_NAMES (mcp / server / app).
-            _recv = _func.value
-            if not isinstance(_recv, ast.Name):
-                continue
-            if _recv.id.lower() not in MCP_INSTANCE_NAMES:
-                continue
-            if not _node.args:
-                continue
-            _arg0 = _node.args[0]
-            if isinstance(_arg0, ast.Name):
-                programmatic_mcp_tools.add(_arg0.id)
-            elif isinstance(_arg0, ast.Attribute):
-                # Best-effort: foo.bar → bar (last attribute name)
-                programmatic_mcp_tools.add(_arg0.attr)
+
+            # v0.5.2 GATE 4 — curried form: mcp.tool(name=...)(fn).
+            # Outer Call's func is itself a Call(Attribute(mcp, 'tool'), ...).
+            # The outer Call's first positional arg is the registered function.
+            if isinstance(_func, ast.Call):
+                _inner = _func.func
+                if not isinstance(_inner, ast.Attribute):
+                    continue
+                if _inner.attr not in MCP_REGISTRATION_ATTRS:
+                    continue
+                _recv = _inner.value
+                if not isinstance(_recv, ast.Name):
+                    continue
+                if _recv.id.lower() not in MCP_INSTANCE_NAMES:
+                    continue
+                if not _node.args:
+                    continue
+                _arg0 = _node.args[0]
+                if isinstance(_arg0, ast.Name):
+                    programmatic_mcp_tools.add(_arg0.id)
+                elif isinstance(_arg0, ast.Attribute):
+                    programmatic_mcp_tools.add(_arg0.attr)
 
     tools: list[Tool] = []
 
     # Shared inter-procedural source-line cache for this file scan.
     _interproc_cache: dict[str, list[str]] = {}
 
+    # GATE 5 — resolve dispatcher nodes into per-tool findings.
+    _dispatcher_node_ids: set[int] = set()   # dispatcher FunctionDef node ids (id() — same tree)
+    _handler_locs: set[tuple[str, int]] = set()  # (file_str, lineno) for same-file handlers
+    for _disp_node in _dispatcher_nodes:
+        _resolved, _hlocs = _resolve_dispatcher(
+            dispatcher_node=_disp_node,
+            tree=tree,
+            source_lines=source_lines,
+            file_path=str(file_path),
+            package_index=package_index,
+            interproc_source_cache=_interproc_cache,
+        )
+        if _resolved:
+            tools.extend(_resolved)
+            _dispatcher_node_ids.add(id(_disp_node))
+            _handler_locs.update(_hlocs)
+        else:
+            # v0.5.2 GATE 2 — zero-branch fallback: emit an OPAQUE Tool for the
+            # dispatcher itself instead of silently falling through to the main
+            # loop. The dispatcher exposes an MCP tool surface whose per-tool
+            # semantics cannot be resolved → honesty demands OPAQUE.
+            print(
+                f"\u26a0 low-level MCP dispatcher (@server.call_tool) in {file_path} "
+                f"\u2014 no branches resolved; emitting OPAQUE fallback.",
+                file=sys.stderr,
+            )
+            tools.append(Tool(
+                name=_disp_node.name,
+                file=str(file_path),
+                line=_disp_node.lineno,
+                params=[],
+                side_effects=[],
+                guards=[],
+                exposure="mcp_internal",
+                exposure_evidence="@*.call_tool dispatcher [unresolved]",
+                opaque_reason=(
+                    "low-level MCP dispatcher with no resolvable if/match branches"
+                ),
+            ))
+            _dispatcher_node_ids.add(id(_disp_node))
+
+    _file_path_str = str(file_path)
+    # v0.5.2 GATE 5 — build node-id → enclosing-class map so _analyze_function
+    # can resolve self.method() against the right ClassDef.
+    _enclosing_class_map: dict[int, str] = {}
+    for _cls in ast.walk(tree):
+        if not isinstance(_cls, ast.ClassDef):
+            continue
+        for _item in _cls.body:
+            if isinstance(_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _enclosing_class_map[id(_item)] = _cls.name
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if id(node) in _dispatcher_node_ids:
+                continue  # already handled by _resolve_dispatcher
+            if _handler_locs and (_file_path_str, node.lineno) in _handler_locs:
+                continue  # same-file handler already emitted under its dispatch key
             tool = _analyze_function(
                 func_node=node,
                 source_lines=source_lines,
@@ -1083,8 +1945,10 @@ def scan_file(
                 module_imports=module_imports,
                 package_index=package_index,
                 module_is_mcp=module_is_mcp,
+                module_is_mcp_client=module_is_mcp_client,
                 programmatic_mcp_tools=programmatic_mcp_tools,
                 interproc_source_cache=_interproc_cache,
+                enclosing_class=_enclosing_class_map.get(id(node)),
             )
             if tool is not None:
                 tools.append(tool)

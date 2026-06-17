@@ -1,5 +1,192 @@
 # Changelog
 
+## [0.5.3] — 2026-06-17
+
+> First release published to PyPI. Cumulates all changes since 0.5.0 (the last PyPI release).
+
+### Fixed — MCP false-negatives (dispatcher + executor indirection)
+- **Dispatcher carrier check** (`treat_as_mcp_tool`): `@server.call_tool()` handlers
+  dispatched by a FastMCP/low-level dispatcher were previously analyzed with
+  `module_is_mcp=False`, skipping the OPAQUE floor and producing `LOW_RISK` for writes.
+  Fix: dispatcher passes `treat_as_mcp_tool=True` so handlers are subject to the same
+  honesty floor as direct `@mcp.tool` functions.
+- **Executor callable indirection** (`asyncio.to_thread` / `run_in_executor` / `submit`):
+  when a callable is passed by reference (not as a Call node), the carrier check never
+  fired. Fix: `_has_unresolved_effect_carrier` now inspects the callable argument of
+  known executor functions (`EXECUTOR_CALLABLE_ATTRS`, `EXECUTOR_CALLABLE_ARG_INDEX`).
+  `create-container` (docker-mcp) now correctly surfaces as `OPAQUE`.
+
+### Improved — OPAQUE precision (opaque_reason quality)
+- `_collect_type_bindings` extended with literal type inference:
+  `x = []` → `"list"`, `x = {}` → `"dict"`, `x = ""` → `"str"`, `x = 0` → `"int"`,
+  `x = b""` → `"bytes"`, plus lowercase builtin constructors (`list()`, `dict()`, …).
+- New `_body_stmts()` helper descends into always-executed `try`/`with` bodies so
+  assignments like `port_mappings = []` inside a `try:` block are captured.
+  Result: `create-container` `opaque_reason` now points to `asyncio.wait_for(pull_and_run())`
+  instead of `port_mappings.append(mapping)`.
+
+### Improved — Terminal OPAQUE framing
+- `◐ OPAQUE` added to `_VERDICT_ICONS` and `_VERDICT_LABELS`.
+- Plain and rich tool blocks: honest glose `not a risk rating — effect surface could not
+  be statically resolved (review manually)` + `unresolved at: <reason>`.
+- MCP summary line now includes opaque count: `N opaque (review)`.
+- Rich renderer: OPAQUE displayed in blue (neutral, not alarming).
+
+### Changed — Documentation
+- `docs/landscape.md`: replaced `"MCP server scanning — On the roadmap"` with accurate
+  description of what is shipped vs what is deliberately out of scope.
+- `docs/limitations.md`: new `OPAQUE verdict — by design` section (external library
+  callables, dispatcher indirection, MCP client proxies, `readOnlyHint` not trusted).
+- `README.md`: Verdicts taxonomy table (5 verdicts + Posture column).
+
+### Changed — Packaging / hygiene
+- Corpus, results, and baseline artefacts untracked from git (kept on disk).
+- `[tool.hatch.build.targets.sdist]` exclude list added as belt-and-suspenders.
+- `datetime.datetime.utcnow()` → `datetime.datetime.now(datetime.timezone.utc)`
+  (DeprecationWarning fix, Python 3.9+ compatible).
+
+---
+
+## [0.5.2] — 2026-06-12
+
+### Added — Wrapped side-effects (étage 1 + étage 2)
+
+- **GATE 1 — étage 1 OPAQUE honesty floor**: tools whose @mcp.tool body
+  contains an unresolved effect-carrier (attribute call or unknown bare Name
+  whose name does not match SIDE_EFFECT_PATTERN and is not in the benign
+  allow-lists) are surfaced as `verdict="OPAQUE"` with a populated
+  `opaque_reason`. Tools that previously vanished now stay visible. Benign
+  filters: `BENIGN_BUILTIN_NAMES`, `BENIGN_ATTR_METHODS`, `BENIGN_RECEIVERS`.
+- **GATE 2 — Dispatcher zero-branch fallback**: `@server.call_tool()`
+  dispatchers with zero resolvable branches now emit one OPAQUE `Tool`
+  (`exposure="mcp_internal"`, `opaque_reason` set) instead of disappearing
+  after a stderr warning.
+- **GATE 3 — `mcp_client` default `opaque_reason`** + JSON serialization:
+  every `mcp_client` tool now carries a default `opaque_reason` if none was
+  set by an earlier path; `opaque_reason` is now serialised in JSON when
+  non-empty (omitted when empty for compact output).
+- **GATE 4 — Curried dynamic registration**: `mcp.tool(name=...)(fn)` is
+  detected as programmatic registration and `fn` is promoted to
+  `exposure="mcp_tool"`. Evidence string mentions "programmatic".
+- **GATE 5 — Étage 2 attribute-call interproc**: `obj.method(...)` calls
+  inside @mcp.tool bodies are resolved when the receiver type is statically
+  certain (`self.method` with known enclosing class, `Class.method` with
+  PascalCase receiver, `var: SomeClass` annotation, or `var = SomeClass(...)`
+  plain Assign in the same function). Reassigned bindings are dropped.
+  Resolution uses `PackageIndex.lookup_class_method` and the refactored
+  `_collect_callee_effects` back-end. Strictly additive: unresolved attribute
+  calls still hit the GATE 1 OPAQUE floor.
+- **GATE 6 — Narrow SDK verb breadth**: five high-signal verbs added to
+  `SIDE_EFFECT_PATTERNS` via `attr_exact` only:
+  `execute_query`, `execute_param_query` → `database_write`;
+  `sendall`, `send_command` → `destructive`;
+  `start_execution` → `destructive`.
+
+### Fixed — Precision improvements (chore/v0.5.2-prod-ready, June 12, 2026)
+
+- **GATE 1 precision fix**: `@mcp.tool` functions whose body only calls stdlib
+  methods on annotated builtin-typed params (`str`, `dict`, `list`, `bytes`,
+  `int`, `float`, `bool`, `complex`, `set`, `frozenset`, `tuple`, `bytearray`)
+  are no longer classified as OPAQUE. These calls are never external side
+  effects. The `type_bindings` dict (already computed for étage-2 interproc)
+  is now threaded into `_has_unresolved_effect_carrier` to enable receiver-type
+  filtering. Example: `def fmt(s: str, d: dict): return s.upper() + str(d.get("k"))`
+  previously emitted OPAQUE (false positive); now drops (no external effect).
+- **GATE 2 reassignment fix**: `_collect_type_bindings` now drops a variable's
+  type binding when the same variable is reassigned to any call (not just a
+  PascalCase constructor). Prevents false type resolution of `r = Reader(); r = get_writer();
+  r.flush()` — `r`'s type is now correctly treated as uncertain.
+- **BENIGN_ATTR_METHODS extended**: added `get`, `append`, `extend`, `pop`,
+  `add`, `update`, `insert`, `remove`, `clear`, `discard` to the allow-list.
+  These are in-memory mutation methods that cannot be external side effects.
+  Excluded from the list: `send`, `write`, `execute*`, `run`, `post`.
+- **Windows path YAML escaping**: `registry.py` now calls `_yaml_escape()` on
+  `tool.file` and the `path` metadata field. Fixes `toolcalls.yaml` parse error
+  on Windows paths containing backslashes (`\U`, `\D` YAML escape collision).
+- **Carrier detector no longer flags wait primitives**: `asyncio.sleep` /
+  `time.sleep` / `trio.sleep` are never external effects (added `sleep` to
+  `BENIGN_ATTR_METHODS`). Removes the Phase-3 spot-check OPAQUE false positive
+  on `await asyncio.sleep(...)` inside `@mcp.tool` bodies.
+- **Terminal reporter no longer crashes on non-UTF-8 consoles** (Windows
+  cp1252): stdout/stderr are reconfigured to UTF-8 with replacement at CLI
+  entry. First-run `diplomat-agent scan .` from a default cmd.exe / PowerShell
+  no longer raises `UnicodeEncodeError` on the `⚠` glyph.
+- **Registry comparison no longer reports false NEW findings on Windows**:
+  the `(function, file)` key is normalized to a canonical path form on both
+  baseline and fresh sides, fixing permanent-red `--fail-on-unchecked` CI on
+  Windows (regression from the v0.5.2 YAML path-escaping fix in GATE 0).
+
+### New negative fixtures (GATE 2)
+
+- `tests/fixtures/mcp/benign_typed_call.py` — stdlib-only tool on typed params;
+  must NOT be OPAQUE.
+- `tests/fixtures/mcp/untyped_wrapper.py` — untyped `driver` param; must be
+  OPAQUE, never UNGUARDED.
+- `tests/fixtures/mcp/reassigned_var.py` — reassigned receiver; must be OPAQUE,
+  never UNGUARDED.
+
+### Tests
+461 passed, 1 skipped (+11 GATE 1/2 fixture tests, +1 cp1252 encoding test,
++1 Windows path round-trip test, +1 sleep benign test). Full suite green on
+Python 3.13 (and 3.12).
+
+### Documentation
+
+- `docs/REALITY_CHECK_RESULTS.md`: closed v0.5.1 verification debt (GATE 0);
+  added v0.5.2 section with two-number reporting (unguarded % over analyzable
+  tools + opacity rate). Zero unexplained FPs confirmed on fixture corpus.
+
+### JSON schema additions (v0.5.2, all additive)
+`opaque_reason` (str, omitted when empty). No removals or renames.
+
+### Acceptance scans
+- pg-mcp-server: 20 → 31 visible tools, 4 → 18 UNGUARDED (14 previously
+  unresolved findings now correctly classified by GATE 6).
+- docker-mcp: 4 → 18 visible tools (14 surfaced by GATE 1 + GATE 5).
+- k8s-mcp-server: 2 → 14 visible tools (12 surfaced by GATE 1 floor).
+No `uncertain → UNGUARDED` escalations observed: guardrail held across all
+three corpora.
+
+---
+
+## [0.5.1] — 2026-06-10
+
+### Added (Gates 1-4, merged earlier as fix/mcp-fidelity-0.5.1)
+- **GATE 1 (FP1)**: `SET TRANSACTION READ ONLY` / `BEGIN READ ONLY` excluded
+  from SQL write patterns — read-only transaction setup is not a write.
+- **GATE 2 (FN1)**: `asyncio.create_subprocess_exec` and
+  `asyncio.create_subprocess_shell` detected as `destructive` side effects.
+  Previously missed when called as `await asyncio.create_subprocess_exec(...)`.
+- **GATE 3 — contract_violation flag**: `DECLARED_READONLY_BUT_WRITES` and
+  `DECLARED_NONDESTRUCTIVE_BUT_DESTRUCTIVE`. Orthogonal to verdict. Surfaces in
+  JSON, SARIF (rule DA010), and terminal. New JSON fields: `readonly_hint`,
+  `destructive_hint`, `contract_violation`.
+- **GATE 4 — OPAQUE verdict**: `session.call_tool()` / `client.call_tool()` in
+  MCP client modules → `exposure="mcp_client"`, `verdict="OPAQUE"`. OPAQUE excluded
+  from `%unguarded` denominator. New JSON summary fields: `opaque`,
+  `files_unparsed_count`.
+
+### Added (Gates 5-6)
+- **GATE 5 — Dispatcher resolution**: `@server.call_tool()` dispatchers are
+  resolved into one `Tool` per branch. Supports `if/elif` chains and `match/case`
+  (Python 3.10+). Cross-file `Class.method` resolution via new
+  `PackageIndex.lookup_class_method`. Unresolvable handlers → `verdict="OPAQUE"`,
+  `opaque_reason` set (never `LOW_RISK`, never dropped). New `Tool` field:
+  `opaque_reason: str`.
+- **GATE 6 — mcp_internal folding**: helpers inside MCP modules tagged
+  `exposure="mcp_internal"`. Terminal hides them by default; new `--verbose` CLI
+  flag expands them. JSON is byte-identical. `build_summary` counts unchanged.
+
+### JSON schema additions (v0.5.1, all additive)
+`readonly_hint` (bool|null), `destructive_hint` (bool|null), `contract_violation`
+(str), `opaque_reason` (str). Summary: `opaque`, `files_unparsed_count`.
+
+### Benchmark
+70.9% unguarded (16 repos, v0.5.0 baseline) is stable. Gate 2 adds ~+6 detections
+on 3 locally re-measured repos (~0.09%). See `docs/REALITY_CHECK_RESULTS.md`.
+
+---
+
 ## [0.5.0] — 2026-05-01
 
 ### Added

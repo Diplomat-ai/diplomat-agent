@@ -57,6 +57,6 @@ diplomat-agent scans for both the effects and the checks. The gap between them i
 
 - **Runtime enforcement** — diplomat-agent is a scanner, not a policy engine. See [Diplomat](https://diplomat.run) for runtime governance.
 - **Taint tracking** — no dataflow analysis. If you need to trace untrusted input to a sink, use Semgrep or CodeQL.
-- **MCP server scanning** — currently scans Python source, not MCP manifests. On the roadmap.
+- **MCP server scanning** — scans Python MCP server implementations (FastMCP `@mcp.tool`, official SDK `@server.call_tool` dispatcher, programmatic registration). Effect surface is analyzed at the implementation level, not inferred from tool descriptions or MCP manifests. TypeScript MCP servers are out of scope.
 - **TypeScript** — Python only. TypeScript on the roadmap.
 - **Import resolution** — if you alias `import requests as r`, the scanner won't catch `r.post()`.

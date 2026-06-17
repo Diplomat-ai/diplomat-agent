@@ -43,8 +43,15 @@ class Tool:
     ignored: bool = False  # True when # diplomat:ok, # canary:ok, or # checked:ok is present
     ignore_reason: str = ""  # text after the marker, e.g. "validated at API layer"
     owasp_agentic: list[str] = field(default_factory=list)  # e.g. ["ASI-02", "ASI-03"]
-    exposure: str = "internal"   # "internal" | "mcp_tool"
+    exposure: str = "internal"   # "internal" | "mcp_tool" | "mcp_internal" | "mcp_client"
     exposure_evidence: str = ""  # decorator proving exposure, e.g. "@mcp.tool()"
+    # MCP ToolAnnotations hints — parsed from @mcp.tool(annotations=ToolAnnotations(...))
+    readonly_hint: "bool | None" = None      # readOnlyHint kwarg value
+    destructive_hint: "bool | None" = None   # destructiveHint kwarg value
+    # Contract violation flag — orthogonal to verdict, set after verdict is computed
+    contract_violation: str = "NONE"  # NONE | DECLARED_READONLY_BUT_WRITES | DECLARED_NONDESTRUCTIVE_BUT_DESTRUCTIVE
+    # GATE 5 — set when a dispatcher branch handler could not be resolved; forces OPAQUE
+    opaque_reason: str = ""  # non-empty → compute_verdict returns OPAQUE
 
 
 @dataclass

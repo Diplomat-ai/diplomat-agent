@@ -27,6 +27,7 @@ _VERDICT_ICONS = {
     "PARTIALLY_GUARDED": "⚠",
     "GUARDED": "✓",
     "LOW_RISK": "✓",
+    "OPAQUE": "◐",
 }
 
 _VERDICT_LABELS = {
@@ -34,6 +35,7 @@ _VERDICT_LABELS = {
     "PARTIALLY_GUARDED": "⚡ PARTIALLY GUARDED",
     "GUARDED": "✅ GUARDED",
     "LOW_RISK": "✅ LOW RISK",
+    "OPAQUE": "◐ OPAQUE",
 }
 
 
@@ -54,6 +56,11 @@ def _plain_tool_block(tool: Tool) -> str:
     if tool.verdict == "LOW_RISK":
         ro_label = "Read-only:"
         lines.append(f"  {ro_label:<24}YES")
+    elif tool.verdict == "OPAQUE":
+        lines.append("  not a risk rating — effect surface could not be statically resolved")
+        lines.append("  (review manually)")
+        if tool.opaque_reason:
+            lines.append(f"  unresolved at: {tool.opaque_reason}")
     else:
         # Show expected guard check lines per category
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
@@ -89,6 +96,10 @@ def _plain_tool_block(tool: Tool) -> str:
 
     verdict_label = _VERDICT_LABELS.get(tool.verdict, tool.verdict)
     lines.append(f"  Governance: {verdict_label}")
+    # Contract violation badge — printed after governance line
+    if tool.contract_violation != "NONE":
+        cv = tool.contract_violation.replace("_", " ").title()
+        lines.append(f"  ⚠ CONTRACT VIOLATION — {cv}")
     return "\n".join(lines)
 
 
@@ -177,8 +188,14 @@ def render_plain(
     scanned_path: str,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> str:
-    """Render the full report as plain text."""
+    """Render the full report as plain text.
+
+    Args:
+        verbose: If False (default), mcp_internal helpers are hidden and a
+            summary line is shown instead.  Pass True to show all tools.
+    """
     buf = StringIO()
 
     def w(line: str = "") -> None:
@@ -197,18 +214,26 @@ def render_plain(
         ug = mcp_summary["unguarded"]
         pg = mcp_summary["partially_guarded"]
         gd = mcp_summary["guarded"]
-        w(
-            f"EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}  "
-            f"{ug} UNGUARDED · {pg} PARTIAL · {gd} GUARDED"
-        )
+        opaque = mcp_summary.get("opaque", 0)
+        summary_parts = f"{ug} unguarded (action) · {pg} partial · {gd} guarded"
+        if opaque:
+            summary_parts += f" · {opaque} opaque (review)"
+        w(f"EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}  {summary_parts}")
         w()
 
     if not result.tools:
         w("No tools with side effects detected.")
         w()
     else:
+        hidden = 0
         for tool in result.tools:
+            if not verbose and tool.exposure == "mcp_internal":
+                hidden += 1
+                continue
             w(_plain_tool_block(tool))
+            w()
+        if hidden:
+            w(f"… {hidden} internal helpers in MCP modules hidden — run with --verbose to show")
             w()
 
     w("─" * 40)
@@ -263,8 +288,13 @@ def _render_rich(
     scanned_path: str,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> None:
-    """Render the report using rich formatting."""
+    """Render the report using rich formatting.
+
+    Args:
+        verbose: If False (default), mcp_internal helpers are hidden.
+    """
     console = Console()
 
     console.print()
@@ -281,14 +311,27 @@ def _render_rich(
         ug = mcp_summary["unguarded"]
         pg = mcp_summary["partially_guarded"]
         gd = mcp_summary["guarded"]
+        opaque = mcp_summary.get("opaque", 0)
+        opaque_part = f" · [blue]{opaque} opaque (review)[/blue]" if opaque else ""
         console.print(
             f"[bold cyan]EXPOSED MCP TOOLS WITH SIDE EFFECTS: {total}[/bold cyan]  "
-            f"[red]{ug} UNGUARDED[/red] · [yellow]{pg} PARTIAL[/yellow] · [green]{gd} GUARDED[/green]"
+            f"[red]{ug} unguarded (action)[/red] · [yellow]{pg} partial[/yellow] · [green]{gd} guarded[/green]"
+            + opaque_part
         )
         console.print()
 
+    hidden = 0
     for tool in result.tools:
+        if not verbose and tool.exposure == "mcp_internal":
+            hidden += 1
+            continue
         _render_rich_tool(console, tool)
+        console.print()
+    if hidden:
+        console.print(
+            f"[dim]… {hidden} internal helpers in MCP modules hidden — "
+            f"run with --verbose to show[/dim]"
+        )
         console.print()
 
     console.rule(style="dim")
@@ -341,6 +384,9 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
     elif tool.verdict == "PARTIALLY_GUARDED":
         icon_color = "yellow"
         icon = "⚠"
+    elif tool.verdict == "OPAQUE":
+        icon_color = "blue"
+        icon = "◐"
     else:
         icon_color = "green"
         icon = "✓"
@@ -351,6 +397,11 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
     if tool.verdict == "LOW_RISK":
         ro_label = "Read-only:"
         console.print(f"  {ro_label:<24}[green]YES[/green]")
+    elif tool.verdict == "OPAQUE":
+        console.print("  [dim]not a risk rating — effect surface could not be statically resolved[/dim]")
+        console.print("  [dim](review manually)[/dim]")
+        if tool.opaque_reason:
+            console.print(f"  [dim]unresolved at: {tool.opaque_reason}[/dim]")
     else:
         categories = list(dict.fromkeys(se.category for se in tool.side_effects))
         guard_types_present = {g.type: g for g in tool.guards}
@@ -385,8 +436,14 @@ def _render_rich_tool(console, tool: Tool) -> None:  # type: ignore[no-untyped-d
         console.print(f"  Governance: [bold red]{verdict_label}[/bold red]")
     elif tool.verdict == "PARTIALLY_GUARDED":
         console.print(f"  Governance: [bold yellow]{verdict_label}[/bold yellow]")
+    elif tool.verdict == "OPAQUE":
+        console.print(f"  Governance: [bold blue]{verdict_label}[/bold blue]")
     else:
         console.print(f"  Governance: [bold green]{verdict_label}[/bold green]")
+    # Contract violation badge
+    if tool.contract_violation != "NONE":
+        cv = tool.contract_violation.replace("_", " ").title()
+        console.print(f"  [bold red]⚠ CONTRACT VIOLATION — {cv}[/bold red]")
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +458,7 @@ def print_report(
     file=None,
     mcp_summary: dict | None = None,
     file_stats: dict | None = None,
+    verbose: bool = False,
 ) -> None:
     """Print the governance report to stdout (or a file handle).
 
@@ -413,6 +471,7 @@ def print_report(
             and non-empty, an auto-surface header is shown before tool blocks.
         file_stats: Stats from the scanner (files_scanned, files_unparsed, etc.).
             If provided, unparsed-file warnings are appended to the report.
+        verbose: If False (default), mcp_internal helpers are hidden in terminal output.
     """
     if file is None:
         file = sys.stdout
@@ -420,7 +479,13 @@ def print_report(
     should_use_rich = _RICH_AVAILABLE if use_rich is None else (use_rich and _RICH_AVAILABLE)
 
     if should_use_rich and file is sys.stdout:
-        _render_rich(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
+        _render_rich(
+            result, scanned_path, mcp_summary=mcp_summary,
+            file_stats=file_stats, verbose=verbose,
+        )
     else:
-        output = render_plain(result, scanned_path, mcp_summary=mcp_summary, file_stats=file_stats)
+        output = render_plain(
+            result, scanned_path, mcp_summary=mcp_summary,
+            file_stats=file_stats, verbose=verbose,
+        )
         file.write(output)

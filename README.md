@@ -63,7 +63,7 @@ arguments, or get prompt-injected.
 **Without guards in the code, there's nothing between the LLM's decision
 and the real-world consequence.**
 
-We scanned 16 open-source agent repos. [~71% of tool calls have no guard — measured with inter-procedural tracing across 6,529 tool calls.](docs/REALITY_CHECK_RESULTS.md)
+We scanned 16 open-source agent repos. [70.9% of analyzable tool calls have no guard, with a 1.7% opacity rate — measured with inter-procedural tracing across 7,552 tool calls.](docs/REALITY_CHECK_RESULTS.md)
 
 ---
 
@@ -114,7 +114,7 @@ Works in your IDE with zero extension to install:
 ```yaml
 repos:
   - repo: https://github.com/Diplomat-ai/diplomat-agent
-    rev: v0.5.0
+    rev: v0.5.3
     hooks:
       - id: diplomat-agent
 ```
@@ -168,6 +168,20 @@ is by design. We scan both identically. Large repos (>400 tool calls) take longe
 inter-procedural tracing (e.g. CrewAI ~38s).
 
 [Full results on 16 repos →](docs/REALITY_CHECK_RESULTS.md)
+
+---
+
+## Verdicts
+
+| Verdict | Meaning | Posture |
+|---|---|---|
+| ❌ UNGUARDED | Side effects detected, no checks found | Fix before deploy |
+| ⚡ PARTIALLY GUARDED | Some checks present, others missing | Review + add missing guards |
+| ✅ GUARDED | All expected checks are present | OK |
+| ✅ LOW RISK | Read-only operations — no state mutation | OK |
+| ◐ OPAQUE | Effect surface could not be statically resolved | **Not a risk rating** — review manually |
+
+OPAQUE is honest, not alarming. It means the scanner reached the boundary of what static analysis can see (callable passed to an executor, remote MCP call, unresolvable dispatcher branch). Use `# checked:ok — [reason]` once reviewed.
 
 ---
 
@@ -253,8 +267,8 @@ CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
   in those paths or external packages
 - MCP scanning: Python only (FastMCP / official SDK) — TypeScript/Node MCP servers are out of scope
 - MCP scanning: transport-layer auth (OAuth, token gateway) is invisible — "unguarded" means no guard inside the tool function, independent of transport
-- MCP scanning: `@mcp.tool` attribute decorator only — bare `@tool` (from direct import) is not detected in v1
-- MCP scanning: `@server.call_tool()` low-level dispatcher is detected with a warning; per-tool resolution is not supported in v1
+- MCP scanning: `@mcp.tool` attribute decorator only — bare `@tool` (from direct import) is not detected
+- MCP scanning: `@server.call_tool()` low-level dispatcher is resolved when handler branches are in scan scope; unresolved/out-of-scope branches are surfaced as OPAQUE
 - [Full limitations →](docs/limitations.md)
 
 ## Roadmap
