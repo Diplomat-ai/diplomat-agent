@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4] — 2026-06-22
+
+### Fixed
+- requires-python aligned to >=3.10, 3.9 removed from CI matrix
+- __version__ now resolved via importlib.metadata
+- removed "Estimated exposure" heuristic dollar amount from CLI output
+
 ## [0.5.3] — 2026-06-17
 
 > First release published to PyPI. Cumulates all changes since 0.5.0 (the last PyPI release).

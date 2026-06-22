@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 
 from diplomat_agent.models import ScanResult, Tool
-from diplomat_agent.analyzer.scenarios import estimate_total_financial_exposure
 from diplomat_agent.reporter.terminal import (
     _category_label,
     _category_risk_hint,
@@ -45,11 +44,6 @@ def render_markdown(result: ScanResult, scanned_path: str) -> str:
     lines.append(f"| 🟢 Low Risk | {s['low_risk']} |")
     lines.append(f"| **Total** | **{s['total_tools']}** |")
     lines.append("")
-
-    exposure = estimate_total_financial_exposure(result.scenarios)
-    if exposure > 0:
-        lines.append(f"**Estimated financial exposure:** ${exposure:,}/day")
-        lines.append("")
 
     # --- Per-tool sections ---
     lines.append("## Tool Details")
