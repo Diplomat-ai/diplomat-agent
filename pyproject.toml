@@ -32,7 +32,15 @@ Repository = "https://github.com/Diplomat-ai/diplomat-agent"
 packages = ["src/diplomat_agent"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["corpus/", "results/", ".baseline*", ".after", ".claude/"]
+exclude = [
+    "corpus/",
+    "results/",
+    ".baseline*",
+    ".after",
+    ".claude/",
+    "mcp-bench/",
+    "MCP-bench*",
+]
 
 [tool.ruff]
 line-length = 100
