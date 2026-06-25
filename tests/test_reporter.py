@@ -94,12 +94,6 @@ class TestRenderPlain:
         assert "Rate limit:" in output
         assert "Approval step:" in output
 
-    def test_exposure_line_present(self):
-        result = _make_handcrafted_result()
-        output = render_plain(result, "./test/")
-        assert "Estimated exposure:" in output
-
-
 # ---------------------------------------------------------------------------
 # JSON reporter
 # ---------------------------------------------------------------------------

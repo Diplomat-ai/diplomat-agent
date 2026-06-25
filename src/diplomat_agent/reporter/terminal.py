@@ -9,7 +9,6 @@ import sys
 from io import StringIO
 
 from diplomat_agent.models import ScanResult, Tool
-from diplomat_agent.analyzer.scenarios import estimate_total_financial_exposure
 
 # Try importing rich; gracefully degrade if not installed
 try:
@@ -247,10 +246,6 @@ def render_plain(
         f" ({s['total_tools']} total)"
     )
 
-    exposure = estimate_total_financial_exposure(result.scenarios)
-    if exposure > 0:
-        w(f"Estimated exposure: ${exposure:,}/day")
-
     w()
     w("  Fix              → add validation in code, the next scan picks it up")
     w("  Acknowledge      → add  # checked:ok  in your source code")
@@ -344,10 +339,6 @@ def _render_rich(
         f" · [bold green]{guarded_count} guarded[/bold green]"
         f" [dim]({s['total_tools']} total)[/dim]"
     )
-
-    exposure = estimate_total_financial_exposure(result.scenarios)
-    if exposure > 0:
-        console.print(f"Estimated exposure: [bold red]${exposure:,}/day[/bold red]")
 
     console.print()
     console.print("  Fix              → add validation in code, the next scan picks it up")

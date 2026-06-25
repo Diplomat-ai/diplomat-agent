@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "diplomat-agent"
-version = "0.5.3"
+version = "0.5.4"
 description = "Scan your agentic codebase for unguarded tool calls with real-world side effects"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -32,7 +32,15 @@ Repository = "https://github.com/Diplomat-ai/diplomat-agent"
 packages = ["src/diplomat_agent"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["corpus/", "results/", ".baseline*", ".after", ".claude/"]
+exclude = [
+    "corpus/",
+    "results/",
+    ".baseline*",
+    ".after",
+    ".claude/",
+    "mcp-bench/",
+    "MCP-bench*",
+]
 
 [tool.ruff]
 line-length = 100
