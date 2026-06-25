@@ -292,6 +292,15 @@ CONTINUE / REVIEW / STOP in < 1ms. Zero dependencies.
 - Zero dependencies (stdlib `ast` only)
 - Optional: `rich` (colored output), `pyyaml` (registry)
 
+## Contributing
+
+Detection patterns are data, not logic — adding a new pattern means adding an
+entry to a list in [`scanner/patterns.py`](src/diplomat_agent/scanner/patterns.py).
+No AST knowledge required.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add patterns, report false
+positives, and run the test suite.
+
 ## License
 
-Apache 2.0 
+Apache 2.0
