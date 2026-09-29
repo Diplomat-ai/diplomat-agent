@@ -57,9 +57,12 @@ class TestOWASPMapping:
         codes = map_tool_to_owasp(_tool(["llm_call"]))
         assert "ASI-05" in codes
 
-    def test_dynamic_code_maps_to_asi03(self):
+    def test_unproduced_category_maps_to_no_codes(self):
+        """'dynamic_code' is never produced by the scanner (see
+        test_category_consistency.py) and was removed from EFFECT_MAPPING —
+        an unmapped category yields no codes, not a stale mapping."""
         codes = map_tool_to_owasp(_tool(["dynamic_code"]))
-        assert "ASI-03" in codes
+        assert codes == []
 
     def test_results_are_sorted(self):
         codes = map_tool_to_owasp(_tool(["agent_invocation"], ["no auth check"]))
