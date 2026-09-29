@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.0] — 2026-09-30
+
+### Added
+- `diplomat-agent scan <path> --emit-gate-config <file>` — generates a
+  [diplomat-gate](https://github.com/Diplomat-ai/diplomat-gate) config from
+  detected side effects. Active policies (default `on_fail: REVIEW`) for
+  categories with an implemented gate policy family (`payment`, `email`);
+  categories without one yet are rendered as a commented block naming their
+  call sites and the diplomat-gate tracking issue, never silently dropped.
+- `diplomat_agent.reporter.gate_mapping.GATE_FAMILY_MAP` — the scanner
+  category → diplomat-gate policy family lookup table backing the above,
+  exposed as public data (locked against drift by
+  `tests/test_gate_mapping.py`).
+
+### Fixed
+- Removed three categories (`dynamic_code`, `messaging`,
+  `repository_method`) that were referenced in `reporter/registry.py` and
+  `analyzer/owasp.py` but never actually produced by the scanner. Also
+  removed `registry.py`'s dead, internally-inconsistent `_GROUP_LABELS`
+  table.
+
+### Changed
+- CI: added `.github/workflows/publish.yml` — tag-triggered PyPI publish
+  via Trusted Publishing (OIDC), replacing the manual `twine upload` used
+  for 0.5.4 and every prior release.
+
 ## [0.5.4] — 2026-06-22
 
 ### Fixed
