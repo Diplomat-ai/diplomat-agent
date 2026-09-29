@@ -73,6 +73,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path for toolcalls.yaml output (default: toolcalls.yaml)",
     )
     parser.add_argument(
+        "--emit-gate-config",
+        metavar="FILE",
+        default=None,
+        help="Write a diplomat-gate config (gate.yaml) derived from detected side effects",
+    )
+    parser.add_argument(
         "--unguarded-only",
         action="store_true",
         help="Only show unguarded tools in the report",
@@ -405,6 +411,14 @@ def main(argv: list[str] | None = None) -> int:
         registry_path = args.output_registry or "toolcalls.yaml"
         generate(result, output_path=registry_path, scanned_path=scanned_path)
         print(f"\n\u2192 Tool call map written to {registry_path}", file=sys.stderr)
+
+    # diplomat-gate config output
+    if args.emit_gate_config:
+        from diplomat_agent.reporter.gate_config import generate as generate_gate_config
+        generate_gate_config(
+            result, output_path=args.emit_gate_config, scanned_path=scanned_path
+        )
+        print(f"\n\u2192 Gate config written to {args.emit_gate_config}", file=sys.stderr)
 
     # --- Exit code for CI: --fail-on-unchecked / --fail-on-unguarded ---
     if fail_on:
