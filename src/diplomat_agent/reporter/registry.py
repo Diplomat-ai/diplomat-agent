@@ -14,19 +14,11 @@ from diplomat_agent.models import ScanResult, Tool
 
 # Effect-type priority groups for NO CHECKS ordering
 _EFFECT_PRIORITY: list[tuple[int, frozenset[str]]] = [
-    (0, frozenset({"payment", "database_delete", "dynamic_code"})),
+    (0, frozenset({"payment", "database_delete"})),
     (1, frozenset({"llm_call", "agent_invocation"})),
     (2, frozenset({"database_write", "http_write"})),
-    (3, frozenset({"email", "messaging", "publish", "file_delete"})),
+    (3, frozenset({"email", "publish", "file_delete"})),
 ]
-
-# Human-readable labels for each priority group
-_GROUP_LABELS: dict[int, list[str]] = {
-    0: ["payment", "database_delete", "dynamic_code"],
-    1: ["llm_call", "dynamic_code"],
-    2: ["database_write", "http_write"],
-    3: ["email", "messaging", "publish", "file_delete"],
-}
 
 
 def _effect_priority(tool: Tool) -> int:
