@@ -41,7 +41,7 @@
   <text x="80" y="228" class="sans" font-size="36" font-weight="700" fill="#7dd3fc">Your rules have</text>
   <text x="80" y="268" class="sans" font-size="36" font-weight="700" fill="#7dd3fc">to keep up.</text>
   <text x="80" y="306" class="sans" font-size="15" fill="#94a3b8">Diplomat turns your company's rules into automatic controls that</text>
-  <text x="80" y="328" class="sans" font-size="15" fill="#94a3b8">block or approve every sensitive action your agents take, in under</text>
+  <text x="80" y="328" class="sans" font-size="15" fill="#94a3b8">block or approve the sensitive actions your rules cover, in under</text>
   <text x="80" y="350" class="sans" font-size="15" fill="#94a3b8">a millisecond, with verifiable proof.</text>
 
   <rect x="80" y="380" width="300" height="44" rx="22" fill="#0b1222" stroke="#334155"/>
