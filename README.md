@@ -6,6 +6,8 @@
 [![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
 [![CI](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml)
 
+<img src="docs/assets/readme-vision-v3.svg" alt="Diplomat: assess, control, prove" width="900">
+
 You deployed a Python AI agent.
 Do you know every function it can call that writes to a database, sends an email,
 charges a card, or deletes data — and which ones have zero checks?
