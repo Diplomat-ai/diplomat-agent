@@ -2,7 +2,7 @@
 
 > Back to [README](../README.md)
 
-| Framework | Coverage | Unguarded % (benchmarks) |
+| Framework | Coverage | Unguarded % (earlier run, Apr 2026) |
 |---|---|---|
 | LangGraph | StateGraph, tool nodes, conditional edges | 76% (Skyvern) |
 | CrewAI | @tool decorator, agent.execute() | 78% |
