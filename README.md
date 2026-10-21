@@ -6,6 +6,8 @@
 [![diplomat-agent: scanned](https://img.shields.io/badge/diplomat--agent-scanned-E8724A)](https://github.com/Diplomat-ai/diplomat-agent)
 [![CI](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Diplomat-ai/diplomat-agent/actions/workflows/ci.yml)
 
+<img src="docs/assets/readme-vision-v3.svg" alt="Diplomat: assess, control, prove" width="900">
+
 You deployed a Python AI agent.
 Do you know every function it can call that writes to a database, sends an email,
 charges a card, or deletes data — and which ones have zero checks?
@@ -216,11 +218,11 @@ def send_alert(message):  # checked:ok — protected by API gateway
 
 ![How diplomat-agent works](docs/architecture.svg)
 
-| Tool              | Stage   | What it does                                                        |
-|-------------------|---------|---------------------------------------------------------------------|
-| diplomat-agent    | Know    | Maps every tool call with side effects. Static. Pre-deploy.         |
-| diplomat-gate     | Decide  | Enforces CONTINUE / REVIEW / STOP at runtime. < 1ms. Zero deps.    |
-| diplomat.run      | Prove   | Immutable audit trail, dashboard, compliance export.                |
+| Tool              | Stage   | What it does                                                        | License                        |
+|-------------------|---------|---------------------------------------------------------------------|--------------------------------|
+| diplomat-agent    | Know    | Maps every tool call with side effects. Static. Pre-deploy.         | Apache-2.0                     |
+| diplomat-gate     | Decide  | Enforces CONTINUE / REVIEW / STOP at runtime. < 1ms. Zero deps.    | BSL 1.1 (source-available)     |
+| diplomat.run      | Prove   | Immutable audit trail, dashboard, compliance export.                | Hosted service                 |
 
 ```bash
 # Step 1 — find what your agent can do

@@ -15,9 +15,9 @@ We ran diplomat-agent on 16 popular open-source AI agent projects — frameworks
 | LLM calls | 464 |
 | Emails | 250 |
 
-**76% of tool calls had zero checks at the source.**
+**76% of tool calls had zero checks at the source** (earlier run: v0.2.0, Apr 2026). The latest published figure is 70.9% (v0.5.0 baseline, with inter-procedural tracing), see [REALITY_CHECK_RESULTS.md](REALITY_CHECK_RESULTS.md).
 
-Known false positive rate: ~5% overall, higher on payment-related patterns (~22%). Full transparency on what we got right, what we got wrong, and what we can't see → [REALITY_CHECK_RESULTS.md](../REALITY_CHECK_RESULTS.md)
+Known false positive rate: ~5% overall, higher on payment-related patterns (~22%). Full transparency on what we got right, what we got wrong, and what we can't see → [REALITY_CHECK_RESULTS.md](REALITY_CHECK_RESULTS.md)
 
 These are the codebases that teams clone, adapt, and ship. The guardrails aren't missing by accident — they're expected to be added by each team, manually, with no standard and no verification that it happened.
 
@@ -29,9 +29,11 @@ One example: [Khoj](https://github.com/khoj-ai/khoj)'s `ai_update_memories` lets
 
 diplomat-agent reduces the attack surface — when prompt injection happens, the unguarded tool calls are the ones that get exploited. Knowing which ones have no checks is the first step.
 
-Full breakdown by repo, including what we got wrong and what the scanner can't see → [REALITY_CHECK_RESULTS.md](../REALITY_CHECK_RESULTS.md)
+Full breakdown by repo, including what we got wrong and what the scanner can't see → [REALITY_CHECK_RESULTS.md](REALITY_CHECK_RESULTS.md)
 
 ## Per-repo benchmarks
+
+The figures in this table are from an earlier run (Apr 2026). Current per-repo figures are in [REALITY_CHECK_RESULTS.md](REALITY_CHECK_RESULTS.md).
 
 | Repo | Type | Tool calls | Unguarded | CSAF findings (after dedup) | Time |
 |---|---|---|---|---|---|
@@ -41,4 +43,4 @@ Full breakdown by repo, including what we got wrong and what the scanner can't s
 | CrewAI | Framework | 348 | 273 (78%) | 50 (cap) | ~1s |
 | Khoj | Application | 127 | 127 | 120 (4 CRITICAL, 33 HIGH) | ~1s |
 
-These are open-source codebases, not production deployments. The numbers reflect what's in the source — not what teams may have added in their private forks. Full methodology, known false positives, and blind spots → [REALITY_CHECK_RESULTS.md](../REALITY_CHECK_RESULTS.md)
+These are open-source codebases, not production deployments. The numbers reflect what's in the source — not what teams may have added in their private forks. Full methodology, known false positives, and blind spots → [REALITY_CHECK_RESULTS.md](REALITY_CHECK_RESULTS.md)
